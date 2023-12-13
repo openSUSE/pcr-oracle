@@ -21,6 +21,7 @@
 #ifndef EVENTLOG_H
 #define EVENTLOG_H
 
+#include "digest.h"
 #include "types.h"
 
 typedef struct tpm_event {
@@ -42,6 +43,8 @@ typedef struct tpm_event {
 
 	/* set by the predictor during pre-scan */
 	int			rehash_strategy;
+
+	tpm_evdigest_t		predicted_digest;
 } tpm_event_t;
 
 typedef void			tpm_event_bit_printer(const char *, ...);
@@ -287,6 +290,8 @@ extern unsigned int		event_log_get_event_count(const tpm_event_log_reader_t *log
 extern unsigned int		event_log_get_tpm_version(const tpm_event_log_reader_t *log);
 extern void			tpm_event_print(tpm_event_t *ev);
 extern void			__tpm_event_print(tpm_event_t *ev, tpm_event_bit_printer *print_fn);
+extern void			tpm_predicted_event_print(tpm_event_t *ev);
+extern void			__tpm_predicted_event_print(tpm_event_t *ev, tpm_event_bit_printer *print_fn);
 extern void			tpm_event_log_rehash_ctx_init(tpm_event_log_rehash_ctx_t *,
 					const tpm_algo_info_t *);
 extern void			tpm_event_log_rehash_ctx_destroy(tpm_event_log_rehash_ctx_t *);

@@ -449,6 +449,34 @@ __tpm_event_print(tpm_event_t *ev, tpm_event_bit_printer *print_fn)
 	hexdump(ev->event_data, ev->event_size, print_fn, 8);
 }
 
+void
+tpm_predicted_event_print(tpm_event_t *ev)
+{
+	__tpm_predicted_event_print(ev, (void (*)(const char *, ...)) printf);
+}
+
+void
+__tpm_predicted_event_print(tpm_event_t *ev, tpm_event_bit_printer *print_fn)
+{
+	print_fn("%05lx: event type=%s pcr=%d data=%u bytes\n",
+			ev->file_offset,
+			tpm_event_type_to_string(ev->event_type),
+			ev->pcr_index, ev->event_size);
+
+	if (ev->__parsed)
+		tpm_parsed_event_print(ev->__parsed, print_fn);
+
+	if (!ev->predicted_digest.algo) {
+		print_fn("  %-10s\n", "no predicted digest");
+	} else {
+		const tpm_evdigest_t *d = &ev->predicted_digest;
+		print_fn("  %-10s %s\n", d->algo->openssl_name, digest_print_value(d));
+	}
+
+	print_fn("  Data:\n");
+	hexdump(ev->event_data, ev->event_size, print_fn, 8);
+}
+
 static const tpm_evdigest_t *
 __tpm_event_rehash_efi_variable(const char *var_name, tpm_event_log_rehash_ctx_t *ctx)
 {

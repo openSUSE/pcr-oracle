@@ -101,6 +101,7 @@ enum {
 	OPT_POLICY_FORMAT,
 	OPT_TARGET_PLATFORM,
 	OPT_BOOT_ENTRY,
+	OPT_COMPARE_CURRENT,
 };
 
 static struct option options[] = {
@@ -134,6 +135,7 @@ static struct option options[] = {
 	{ "policy-format",	required_argument,	0,	OPT_POLICY_FORMAT },
 	{ "target-platform",	required_argument,	0,	OPT_TARGET_PLATFORM },
 	{ "next-kernel",	required_argument,	0,	OPT_BOOT_ENTRY },
+	{ "compare-current",	no_argument,		0,	OPT_COMPARE_CURRENT },
 
 	{ NULL }
 };
@@ -763,6 +765,8 @@ predictor_update_eventlog(struct predictor *pred)
 			}
 
 			predictor_extend_hash(pred, ev->pcr_index, new_digest);
+
+			memcpy(&ev->predicted_digest, new_digest, sizeof(tpm_evdigest_t));
 		}
 
 no_action:
@@ -889,6 +893,87 @@ predictor_verify(struct predictor *pred, const char *source)
 	if (num_mismatches)
 		error("Found %u mismatches\n", num_mismatches);
 	return num_mismatches;
+}
+
+static bool
+compare_events(struct predictor *pred, struct predictor *pred_cmp,
+	       unsigned int pcr_index, tpm_event_t *stop_event)
+{
+	tpm_event_t *ev, *ev_cmp;
+	const tpm_evdigest_t *predicted_digest, *cmp_digest;
+
+	for(ev = pred->event_log, ev_cmp = pred_cmp->event_log; ev; ev = ev->next, ev_cmp = ev_cmp->next) {
+		bool stop = false;
+		stop = (ev == stop_event);
+		if (stop && !pred->stop_event.after) {
+			debug("Stopped processing event log before indicated event\n");
+			break;
+		}
+
+		if (ev->pcr_index == pcr_index) {
+			/* Advance the event in the comparison event log */
+			while(ev_cmp) {
+				if (ev_cmp->pcr_index == pcr_index)
+					break;
+				ev_cmp = ev_cmp->next;
+			}
+
+			if (ev_cmp == NULL) {
+				tpm_event_print(ev);
+				printf("No corresponding event in the comparison event log\n");
+				printf("\n");
+				return false;
+			}
+
+			if (!(cmp_digest = tpm_event_get_digest(ev_cmp, pred->algo_info)))
+				fatal("Comparison event log lacks a hash for digest algorithm %s\n", pred->algo);
+			if (ev->predicted_digest.algo) {
+				predicted_digest = &ev->predicted_digest;
+
+				if (predicted_digest->size == cmp_digest->size
+				    && memcmp(predicted_digest->data, cmp_digest->data, cmp_digest->size)) {
+					printf("Predicted event:\n");
+					tpm_predicted_event_print(ev);
+					printf("Actual event:\n");
+					tpm_event_print(ev_cmp);
+					printf("\n");
+
+					return false;
+				}
+			}
+		}
+
+		if (stop) {
+			debug("Stopped processing event log after indicated event\n");
+			break;
+		}
+	}
+
+	return true;
+}
+
+static unsigned int
+predictor_compare(struct predictor *pred, struct predictor *pred_cmp)
+{
+	const tpm_pcr_bank_t *bank = &pred->prediction;
+	unsigned int pcr_index;
+	tpm_event_t *stop_event = NULL;
+	unsigned int num_diff = 0;
+
+	predictor_pre_scan_eventlog(pred, &stop_event);
+
+	for (pcr_index = 0; pcr_index < PCR_BANK_REGISTER_MAX; ++pcr_index) {
+		if (!pcr_bank_register_is_valid(bank, pcr_index))
+			continue;
+
+		if (!compare_events(pred, pred_cmp, pcr_index, stop_event))
+			num_diff++;
+	}
+
+	if (num_diff == 0)
+		printf("Predicted event log matches.\n");
+
+	return 0;
 }
 
 static void
@@ -1020,6 +1105,7 @@ int
 main(int argc, char **argv)
 {
 	struct predictor *pred;
+	struct predictor *pred_cmp;
 	int action = ACTION_NONE;
 	tpm_pcr_selection_t *pcr_selection = NULL;
 	char *opt_from = NULL;
@@ -1042,6 +1128,7 @@ main(int argc, char **argv)
 	char *opt_policy_name = NULL;
 	char *opt_target_platform = NULL;
 	char *opt_boot_entry = NULL;
+	bool opt_compare_current = false;
 	const target_platform_t *target;
 	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
@@ -1140,6 +1227,9 @@ main(int argc, char **argv)
 		case OPT_TARGET_PLATFORM:
 			opt_target_platform = optarg;
 			break;
+		case OPT_COMPARE_CURRENT:
+			opt_compare_current = true;
+			break;
 		case 'h':
 			usage(0, NULL);
 		default:
@@ -1157,6 +1247,9 @@ main(int argc, char **argv)
 
 	if (opt_create_testcase)
 		runtime_record_testcase(testcase_alloc(opt_create_testcase));
+
+	if (!opt_replay_testcase && opt_compare_current)
+		fatal("--compare-current is only valid for --replay-testcase\n");
 
 	if (opt_rsa_bits) {
 		if (strcmp(opt_rsa_bits, "2048") == 0)
@@ -1325,12 +1418,24 @@ main(int argc, char **argv)
 	if (opt_stop_event)
 		predictor_set_stop_event(pred, opt_stop_event, !opt_stop_before);
 
+	if (opt_compare_current) {
+		testcase_t *tc_playback = runtime_get_replay_testcase();
+		/* Disable replay testcase temporarily to access the current TPM event log*/
+		runtime_replay_testcase(NULL);
+		pred_cmp = predictor_new(pcr_selection, "eventlog", NULL,
+					 opt_output_format, opt_boot_entry);
+		/* Restore replay testcase */
+		runtime_replay_testcase(tc_playback);
+	}
+
 	if (!predictor_update_all(pred, argc - optind, argv + optind))
 		return 1;
 
 	if (action == ACTION_PREDICT) {
 		if (opt_verify)
 			exit_code = !!predictor_verify(pred, opt_verify);
+		else if (opt_compare_current)
+			exit_code = !!predictor_compare(pred, pred_cmp);
 		else
 			predictor_report(pred);
 	} else
