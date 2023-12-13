@@ -70,6 +70,12 @@ runtime_replay_testcase(testcase_t *tc)
 	testcase_playback = tc;
 }
 
+testcase_t *
+runtime_get_replay_testcase(void)
+{
+	return testcase_playback;
+}
+
 file_locator_t *
 runtime_locate_file(const char *device_path, const char *file_path)
 {

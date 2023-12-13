@@ -50,6 +50,7 @@ extern unsigned int	runtime_blockdev_bytes_to_sectors(const block_dev_io_t *, un
 
 extern void		runtime_record_testcase(testcase_t *);
 extern void		runtime_replay_testcase(testcase_t *);
+extern testcase_t *	runtime_get_replay_testcase(void);
 
 #include <stdio.h>
 
