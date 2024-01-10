@@ -368,6 +368,7 @@ pcr_bank_extend_register(tpm_pcr_bank_t *bank, unsigned int pcr_index, const tpm
 static void
 predictor_extend_hash(struct predictor *pred, unsigned int pcr_index, const tpm_evdigest_t *d)
 {
+	debug("Extend PCR#%d: %s\n", pcr_index, digest_print(d));
 	pcr_bank_extend_register(&pred->prediction, pcr_index, d);
 }
 
