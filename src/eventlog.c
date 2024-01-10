@@ -905,6 +905,7 @@ __tpm_event_tag_initrd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *p
 	}
 
 	debug("Next boot entry expected from: %s %s\n", boot_entry->title, boot_entry->version? : "");
+	debug("Measuring initrd: %s\n", boot_entry->initrd_path);
 	return runtime_digest_efi_file(ctx->algo, boot_entry->initrd_path);
 }
 
