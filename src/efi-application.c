@@ -292,6 +292,12 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 
 	/* The next boot can have a different kernel */
 	if (sdb_is_kernel(evspec->efi_application) && ctx->boot_entry) {
+		/* TODO: the parsed data type did not change, so all
+		 * the description correspond to the current event
+		 * log, and not the asset that has been measured.  The
+		 * debug output can then be missleading.
+		 */
+		debug("Measuring %s\n", ctx->boot_entry->image_path);
 		new_application = ctx->boot_entry->image_path;
 		if (new_application) {
 			evspec_clone = *evspec;
