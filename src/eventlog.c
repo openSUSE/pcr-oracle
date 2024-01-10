@@ -818,8 +818,8 @@ static const tpm_evdigest_t *
 __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
 	const uapi_boot_entry_t *boot_entry = ctx->boot_entry;
-	char initrd[2048];
-	char initrd_utf16[4096];
+	char cmdline[2048];
+	char cmdline_utf16[4096];
 	unsigned int len;
 
 	/* If no --next-kernel option was given, do not rehash anything */
@@ -832,15 +832,16 @@ __tpm_event_systemd_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	}
 
 	debug("Next boot entry expected from: %s %s\n", boot_entry->title, boot_entry->version? : "");
-	snprintf(initrd, sizeof(initrd), "initrd=%s %s",
+	snprintf(cmdline, sizeof(cmdline), "initrd=%s %s",
 			path_unix2dos(boot_entry->initrd_path),
 			boot_entry->options? : "");
+	debug("Measuring Kernel command line: %s\n", cmdline);
 
-	len = (strlen(initrd) + 1) << 1;
-	assert(len <= sizeof(initrd_utf16));
-	__convert_to_utf16le(initrd, strlen(initrd) + 1, initrd_utf16, len);
+	len = (strlen(cmdline) + 1) << 1;
+	assert(len <= sizeof(cmdline_utf16));
+	__convert_to_utf16le(cmdline, strlen(cmdline) + 1, cmdline_utf16, len);
 
-	return digest_compute(ctx->algo, initrd_utf16, len);
+	return digest_compute(ctx->algo, cmdline_utf16, len);
 }
 
 /*
