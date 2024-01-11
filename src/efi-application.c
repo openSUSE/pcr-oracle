@@ -40,7 +40,7 @@
  */
 static const tpm_evdigest_t *	__tpm_event_efi_bsa_rehash(const tpm_event_t *, const tpm_parsed_event_t *, tpm_event_log_rehash_ctx_t *);
 static bool			__tpm_event_efi_bsa_extract_location(tpm_parsed_event_t *parsed);
-static bool			__tpm_event_efi_bsa_inspect_image(tpm_parsed_event_t *parsed);
+static bool			__tpm_event_efi_bsa_inspect_image(struct efi_bsa_event *evspec);
 
 static void
 __tpm_event_efi_bsa_destroy(tpm_parsed_event_t *parsed)
@@ -111,7 +111,7 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 			assign_string(&ctx->efi_partition, evspec->efi_partition);
 		else
 			assign_string(&evspec->efi_partition, ctx->efi_partition);
-		__tpm_event_efi_bsa_inspect_image(parsed);
+		__tpm_event_efi_bsa_inspect_image(evspec);
 	}
 
 	return true;
@@ -150,9 +150,8 @@ __tpm_event_efi_bsa_extract_location(tpm_parsed_event_t *parsed)
 }
 
 static bool
-__tpm_event_efi_bsa_inspect_image(tpm_parsed_event_t *parsed)
+__tpm_event_efi_bsa_inspect_image(struct efi_bsa_event *evspec)
 {
-        struct efi_bsa_event *evspec = &parsed->efi_bsa_event;
 	char path[PATH_MAX];
 	const char *display_name;
 	buffer_t *img_data;
@@ -302,6 +301,7 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 		if (new_application) {
 			evspec_clone = *evspec;
 			evspec_clone.efi_application = strdup(new_application);
+			__tpm_event_efi_bsa_inspect_image(&evspec_clone);
 			evspec = &evspec_clone;
 		}
 	}
