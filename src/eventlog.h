@@ -99,8 +99,11 @@ enum {
 };
 
 enum {
-	LOAD_OPTIONS_EVENT_TAG_ID	     = 0x8F3B22EDU,
-	INITRD_EVENT_TAG_ID		     = 0x8F3B22ECU,
+	/* systemd-boot */
+	LOADER_CONF_EVENT_TAG_ID             = 0xF5BC582A,
+	/* kernel */
+	LOAD_OPTIONS_EVENT_TAG_ID	     = 0x8F3B22ED,
+	INITRD_EVENT_TAG_ID		     = 0x8F3B22EC,
 };
 
 #define EFI_DEVICE_PATH_MAX		16
