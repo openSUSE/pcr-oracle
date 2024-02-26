@@ -42,6 +42,8 @@ static const tpm_evdigest_t *	__tpm_event_efi_bsa_rehash(const tpm_event_t *, co
 static bool			__tpm_event_efi_bsa_extract_location(tpm_parsed_event_t *parsed);
 static bool			__tpm_event_efi_bsa_inspect_image(struct efi_bsa_event *evspec);
 
+static bool			__is_shim_issue(const tpm_event_t *ev, const struct efi_bsa_event *evspec);
+
 static void
 __tpm_event_efi_bsa_destroy(tpm_parsed_event_t *parsed)
 {
@@ -113,6 +115,15 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 			assign_string(&evspec->efi_partition, ctx->efi_partition);
 		__tpm_event_efi_bsa_inspect_image(evspec);
 	}
+
+	/* When the shim issue is present the efi_application will be
+	 * empty.  The binary path will be reconstructed with the
+	 * --next-kernel parameter, but to generate the full path the
+	 * `efi_partition` is needed.
+	 */
+	if (__is_shim_issue(ev, evspec))
+		assign_string(&evspec->efi_partition, ctx->efi_partition);
+
 
 	return true;
 }
@@ -273,6 +284,31 @@ efi_application_extract_signer(const tpm_parsed_event_t *parsed)
 	return authenticode_get_signer(evspec->img_info);
 }
 
+static bool __is_shim_issue(const tpm_event_t *ev, const struct efi_bsa_event *evspec)
+{
+	/* When secure boot is enabled and shim is installed,
+	 * systemd-boot installs some security overrides that will
+	 * delegate into shim (via shim_validate from systemd-boot)
+	 * the validation of the kernel signature.
+	 *
+	 * The shim_validate function receives the device path from
+	 * the firmware, and is used to load the kernel into memory.
+	 * At the end call shim_verify from shim, but pass only the
+	 * buffer with the loaded image.
+	 *
+	 * The net result is that the event log
+	 * EV_EFI_BOOT_SERVICES_APPLICATION registered by shim_verify
+	 * will not contain the device path that pcr-oracle requires
+	 * to rehash the binary.
+	 *
+	 * So far only the kernel is presenting this issue (when
+	 * systemd-boot is used, GRUB2 needs to be evaluated), so this
+	 * can be detected if there is an event registered in PCR 4
+	 * without path.
+	 */
+	return (secure_boot_enabled() && ev->pcr_index == 4 && !evspec->efi_application);
+}
+
 static const tpm_evdigest_t *
 __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
@@ -284,13 +320,19 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	 * We're not yet prepared to handle these, so we hope the user doesn't mess with them, and
 	 * return the original digest from the event log.
 	 */
-	if (!evspec->efi_application) {
-		debug("Unable to locate boot service application - probably not a file\n");
+	if (!evspec->efi_application && !(__is_shim_issue(ev, evspec) && ctx->boot_entry)) {
+		if (__is_shim_issue(ev, evspec) && !ctx->boot_entry)
+			debug("Unable to locate boot service application - missing device path because shim issue");
+		else
+			debug("Unable to locate boot service application - probably not a file\n");
 		return tpm_event_get_digest(ev, ctx->algo);
 	}
 
 	/* The next boot can have a different kernel */
-	if (sdb_is_kernel(evspec->efi_application) && ctx->boot_entry) {
+	if ((sdb_is_kernel(evspec->efi_application) || __is_shim_issue(ev, evspec)) && ctx->boot_entry) {
+		if (__is_shim_issue(ev, evspec))
+			debug("Empty device path for the kernel - building one based on next kernel\n");
+
 		/* TODO: the parsed data type did not change, so all
 		 * the description correspond to the current event
 		 * log, and not the asset that has been measured.  The

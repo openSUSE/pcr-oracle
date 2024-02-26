@@ -138,6 +138,9 @@ sdb_is_kernel(const char *application)
 	char *path_copy;
 	int found = 0;
 
+	if (!application)
+		return false;
+
 	match = get_valid_kernel_entry_tokens();
 	path_copy = strdup(application);
 
