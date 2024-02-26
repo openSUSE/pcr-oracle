@@ -34,7 +34,8 @@ ORACLE_SRCS	= oracle.c \
 		  store.c \
 		  util.c \
 		  sd-boot.c \
-		  uapi.c
+		  uapi.c \
+		  secure_boot.c
 ORACLE_OBJS	= $(addprefix build/,$(patsubst %.c,%.o,$(ORACLE_SRCS)))
 
 all: $(TOOLS) $(MANPAGES)
