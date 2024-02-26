@@ -331,4 +331,6 @@ extern bool			shim_variable_name_valid(const char *name);
 extern const char *		shim_variable_get_rtname(const char *name);
 extern const char *		shim_variable_get_full_rtname(const char *name);
 
+extern bool			secure_boot_enabled();
+
 #endif /* EVENTLOG_H */
