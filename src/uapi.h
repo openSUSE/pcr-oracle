@@ -41,7 +41,8 @@ typedef struct uapi_kernel_entry_tokens {
 	char *		entry_token[UAPI_MAX_ENTRY_TOKENS];
 } uapi_kernel_entry_tokens_t;
 
-#define UAPI_BOOT_DIRECTORY	"/boot/efi/loader/entries"
+#define UAPI_BOOT_DIRECTORY_EFI	"/loader/entries"
+#define UAPI_BOOT_DIRECTORY	"/boot/efi" UAPI_BOOT_DIRECTORY_EFI
 
 extern uapi_boot_entry_t *	uapi_get_boot_entry(const char *id);
 extern uapi_boot_entry_t *	uapi_find_boot_entry(const uapi_kernel_entry_tokens_t *match, const char *machine_id);

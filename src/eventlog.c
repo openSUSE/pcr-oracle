@@ -33,6 +33,7 @@
 #include "digest.h"
 #include "util.h"
 #include "uapi.h"
+#include "sd-boot.h"
 
 #define TPM_EVENT_LOG_MAX_ALGOS		64
 
@@ -610,8 +611,24 @@ __tpm_event_grub_file_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pa
 		debug("  assuming the file resides on system partition\n");
 		md = runtime_digest_rootfs_file(ctx->algo, evspec->path);
 	} else {
-		debug("  assuming the file resides on EFI boot partition\n");
-		md = runtime_digest_efi_file(ctx->algo, evspec->path);
+		if (sdb_is_boot_entry(evspec->path) && ctx->boot_entry_path) {
+			debug("  getting different boot entry file from EFI boot partition: %s\n",
+			      ctx->boot_entry_path);
+			md = runtime_digest_rootfs_file(ctx->algo, ctx->boot_entry_path);
+		} else
+		if (sdb_is_kernel(evspec->path) && ctx->boot_entry) {
+			debug("  getting different kernel from EFI boot partition: %s\n",
+			      ctx->boot_entry->image_path);
+			md = runtime_digest_efi_file(ctx->algo, ctx->boot_entry->image_path);
+		} else
+		if (sdb_is_initrd(evspec->path) && ctx->boot_entry) {
+			debug("  getting different initrd from EFI boot partition: %s\n",
+			      ctx->boot_entry->initrd_path);
+			md = runtime_digest_efi_file(ctx->algo, ctx->boot_entry->initrd_path);
+		} else {
+			debug("  assuming the file resides on EFI boot partition\n");
+			md = runtime_digest_efi_file(ctx->algo, evspec->path);
+		}
 	}
 
 	return md;

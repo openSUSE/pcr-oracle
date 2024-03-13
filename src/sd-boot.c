@@ -130,10 +130,9 @@ get_valid_kernel_entry_tokens(void)
 /*
  * This should probably use UAPI boot entry logic as well
  */
-bool
-sdb_is_kernel(const char *application)
+static bool
+is_valid_entry_token(const char *application, const char *prefix)
 {
-	static const char prefix[] = "linux-";
 	const uapi_kernel_entry_tokens_t *match;
 	char *path_copy;
 	int found = 0;
@@ -151,13 +150,34 @@ sdb_is_kernel(const char *application)
 
 			if (!strcmp(ptr, token))
 				found |= 1;
-			else if (!strncmp(ptr, prefix, sizeof(prefix) - 1))
+			else if (!strncmp(ptr, prefix, strlen(prefix)))
 				found |= 2;
 		}
 	}
 
 	free(path_copy);
 	return (found == 3);
+}
+
+bool
+sdb_is_kernel(const char *application)
+{
+	return is_valid_entry_token(application, "linux-");
+}
+
+bool
+sdb_is_initrd(const char *application)
+{
+	return is_valid_entry_token(application, "initrd-");
+}
+
+bool
+sdb_is_boot_entry(const char *application)
+{
+	if (!application)
+		return false;
+
+	return !strncmp(application, UAPI_BOOT_DIRECTORY_EFI, sizeof(UAPI_BOOT_DIRECTORY_EFI) - 1);
 }
 
 /*
