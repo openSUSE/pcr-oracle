@@ -43,7 +43,9 @@ typedef struct sdb_entry_list {
 } sdb_entry_list_t;
 
 extern uapi_boot_entry_t *	sdb_identify_boot_entry(const char *id);
+extern bool			sdb_is_boot_entry(const char *application);
 extern bool			sdb_is_kernel(const char *application);
+extern bool			sdb_is_initrd(const char *application);
 
 /* This will have to update the systemd json file, and add a new entry. */
 extern bool			sdb_policy_file_add_entry(const char *filename,
