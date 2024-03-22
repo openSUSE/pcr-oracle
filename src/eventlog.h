@@ -92,10 +92,12 @@ enum {
 enum {
 	/* IPL subtypes for grub */
 	GRUB_EVENT_COMMAND		     = 0x0001,
-	GRUB_EVENT_FILE			     = 0x0002,
-	GRUB_EVENT_KERNEL_CMDLINE	     = 0x0003,
-	SHIM_EVENT_VARIABLE		     = 0x0004,
-	SYSTEMD_EVENT_VARIABLE		     = 0x0005,
+	GRUB_EVENT_COMMAND_LINUX	     = 0x0002,
+	GRUB_EVENT_COMMAND_INITRD	     = 0x0003,
+	GRUB_EVENT_FILE			     = 0x0004,
+	GRUB_EVENT_KERNEL_CMDLINE	     = 0x0005,
+	SHIM_EVENT_VARIABLE		     = 0x0006,
+	SYSTEMD_EVENT_VARIABLE		     = 0x0007,
 };
 
 enum {
@@ -214,6 +216,13 @@ typedef struct tpm_event_log_rehash_ctx {
 
 #define GRUB_COMMAND_ARGV_MAX	32
 
+typedef struct grub_file {
+	char *			device;
+	char *			path;
+} grub_file_t;
+
+typedef grub_file_t		grub_file_event;
+
 /*
  * Parsed event types
  */
@@ -253,13 +262,12 @@ typedef struct tpm_parsed_event {
 		/* for GRUB_COMMAND, GRUB_KERNEL_CMDLINE */
 		struct grub_command_event {
 			char *		string;
-			char *		argv[GRUB_COMMAND_ARGV_MAX];
+			char *          argv[GRUB_COMMAND_ARGV_MAX];
+			grub_file_t	file;
 		} grub_command;
 
-		struct grub_file_event {
-			char *		device;
-			char *		path;
-		} grub_file;
+		/* for GRUB_FILE */
+		grub_file_event		grub_file;
 
 		struct shim_event {
 			char *		string;
