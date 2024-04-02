@@ -333,6 +333,7 @@ __convert(const char *tocode, const char *fromcode, char *in_string, size_t in_b
 				&out_string, &out_bytes);
 		if (converted == (size_t) -1) {
 			perror("iconv");
+			iconv_close(ctx);
 			return false;
 		}
 	}
