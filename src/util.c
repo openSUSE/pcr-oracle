@@ -336,13 +336,12 @@ __convert(const char *tocode, const char *fromcode, char *in_string, size_t in_b
 			return false;
 		}
 	}
-	*out_string = '\0';
 
 	return true;
 }
 
 /*
- * Conversion between UTF-8 and UTF-16LE for EFI event log
+ * Conversion between UTF-8 and UTF-16LE for EFI event log. Does not null-terminate!
  */
 bool
 __convert_from_utf16le(char *in_string, size_t in_bytes, char *out_string, size_t out_bytes)

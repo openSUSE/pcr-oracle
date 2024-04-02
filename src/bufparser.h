@@ -170,14 +170,14 @@ buffer_get_utf16le(buffer_t *bp, size_t len)
 {
 	char *utf16, *utf8, *result = NULL;
 
-	utf16 = malloc(2 * (len + 1));
+	utf16 = malloc(2 * len);
 	if (!utf16)
 		fatal("out of memory");
 
 	if (!buffer_get(bp, utf16, 2 * len))
 		return NULL;
 
-	utf8 = malloc(4 * (len + 1));
+	utf8 = calloc(4, len + 1);
 
 	if (__convert_from_utf16le(utf16, 2 * len, utf8, 4 * len))
 		result = strdup(utf8);
