@@ -327,7 +327,7 @@ runtime_disk_for_partition(const char *part_dev)
 		error("Error insufficient buffer size for the link of %s\n", sys_block);
 		return NULL;
 	}
-
+	sys_device[link_size] = '\0';
 	*strrchr(sys_device, '/') = '\0';
 	disk_name = strrchr(sys_device, '/')+1;
 
