@@ -67,8 +67,9 @@ static TPM2B_PUBLIC SRK_template = {
 	.publicArea = {
 		.type = TPM2_ALG_RSA,
 		.nameAlg = TPM2_ALG_SHA256,
-		/* For reasons not clear to me, grub2 derives the SRK using the NODA attribute,
-		 * which means it is not subject to dictionary attack protections. */
+		/* Per "Storage Primary Key (SRK) Templates" in section 7.5.1 of
+		 * TCG TPM v2.0 Provisioning Guidance 1.0 Revision 1.0, the
+		 * template for shared SRKs sets USERWITHAUTH and NODA. */
 		.objectAttributes = TPMA_OBJECT_RESTRICTED|TPMA_OBJECT_DECRYPT \
 			|TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT \
 			|TPMA_OBJECT_SENSITIVEDATAORIGIN|TPMA_OBJECT_USERWITHAUTH \
