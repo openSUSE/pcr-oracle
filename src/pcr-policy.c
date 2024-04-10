@@ -62,7 +62,7 @@ struct target_platform {
 					const stored_key_t *public_key_file);
 };
 
-static TPM2B_PUBLIC SRK_template = {
+static TPM2B_PUBLIC RSA_SRK_template = {
 	.size = sizeof(TPMT_PUBLIC),
 	.publicArea = {
 		.type = TPM2_ALG_RSA,
@@ -88,6 +88,35 @@ static TPM2B_PUBLIC SRK_template = {
 	}
 };
 
+static TPM2B_PUBLIC ECC_SRK_template = {
+	.size = sizeof(TPMT_PUBLIC),
+	.publicArea = {
+		.type = TPM2_ALG_ECC,
+		.nameAlg = TPM2_ALG_SHA256,
+		/* Per "Storage Primary Key (SRK) Templates" in section 7.5.1 of
+		 * TCG TPM v2.0 Provisioning Guidance 1.0 Revision 1.0, the
+		 * template for shared SRKs sets USERWITHAUTH and NODA. */
+		.objectAttributes = TPMA_OBJECT_RESTRICTED|TPMA_OBJECT_DECRYPT \
+			|TPMA_OBJECT_FIXEDTPM|TPMA_OBJECT_FIXEDPARENT \
+			|TPMA_OBJECT_SENSITIVEDATAORIGIN|TPMA_OBJECT_USERWITHAUTH \
+			|TPMA_OBJECT_NODA,
+		.parameters = {
+			.eccDetail = {
+				.symmetric = {
+					.algorithm = TPM2_ALG_AES,
+					.keyBits = { .sym = 128 },
+					.mode = { .sym = TPM2_ALG_CFB },
+				},
+				.scheme = { TPM2_ALG_NULL },
+				.curveID = TPM2_ECC_NIST_P256,
+				.kdf.scheme = TPM2_ALG_NULL
+			}
+		}
+	}
+};
+
+static const TPM2B_PUBLIC *SRK_template;
+
 static const TPM2B_PUBLIC seal_public_template = {
             .size = sizeof(TPMT_PUBLIC),
             .publicArea = {
@@ -108,9 +137,18 @@ static const TPM2B_PUBLIC seal_public_template = {
         };
 
 void
+set_srk_alg (const char *alg)
+{
+	if (strcmp(alg, "RSA") == 0)
+		SRK_template = &RSA_SRK_template;
+	else
+		SRK_template = &ECC_SRK_template;
+}
+
+void
 set_srk_rsa_bits (const unsigned int rsa_bits)
 {
-	SRK_template.publicArea.parameters.rsaDetail.keyBits = rsa_bits;
+	RSA_SRK_template.publicArea.parameters.rsaDetail.keyBits = rsa_bits;
 }
 
 static inline const tpm_evdigest_t *
@@ -609,7 +647,7 @@ esys_create_primary(ESYS_CONTEXT *esys_context, ESYS_TR *handle_ret)
 	t0 = timing_begin();
 	rc = Esys_CreatePrimary(esys_context, ESYS_TR_RH_OWNER,
 			ESYS_TR_PASSWORD,
-			ESYS_TR_NONE, ESYS_TR_NONE, &in_sensitive, &SRK_template,
+			ESYS_TR_NONE, ESYS_TR_NONE, &in_sensitive, SRK_template,
 			NULL, &creation_pcr, handle_ret,
 			NULL, NULL,
 			NULL, NULL);
