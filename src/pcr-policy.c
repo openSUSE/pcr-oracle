@@ -1505,6 +1505,11 @@ tpm2key_unseal_secret(const char *input_path, const char *output_path,
 	if (!tpm2key_read_file(input_path, &tpm2key))
 		return false;
 
+	if (tpm2key->rsaParent == 1)
+		SRK_template = &RSA_SRK_template;
+	else
+		SRK_template = &ECC_SRK_template;
+
 	buffer_init_read(&buf, tpm2key->pubkey->data, tpm2key->pubkey->length);
 	rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(buf.data, buf.size, &buf.rpos, &pub);
 	if (rc != TSS2_RC_SUCCESS)
@@ -1633,6 +1638,9 @@ tpm2key_write_sealed_secret(const char *pathname,
 
 	if (!tpm2key_basekey(&tpm2key, TPM2_RH_OWNER, sealed_public, sealed_private))
 		goto cleanup;
+
+	if (SRK_template->publicArea.type == TPM2_ALG_RSA)
+		tpm2key->rsaParent = 1;
 
 	if (pcr_sel && !tpm2key_add_policy_policypcr(tpm2key, pcr_sel))
 		goto cleanup;
