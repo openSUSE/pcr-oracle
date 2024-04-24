@@ -77,6 +77,8 @@ DEFINE_STACK_OF(TSSAUTHPOLICY);
  *	policy		[1] EXPLICIT SEQUENCE OF TPMPolicy OPTIONAL
  *	secret		[2] EXPLICIT OCTET STRING OPTIONAL
  *	authPolicy	[3] EXPLICIT SEQUENCE OF TPMAuthPolicy OPTIONAL
+ *	description     [4] EXPLICIT UTF8String OPTIONAL
+ *	rsaParent       [5] EXPLICIT BOOLEAN OPTIONAL
  *	parent		INTEGER
  *	pubkey		OCTET STRING
  *	privkey		OCTET STRING
@@ -89,6 +91,8 @@ typedef struct {
 	STACK_OF(TSSOPTPOLICY) *policy;
 	ASN1_OCTET_STRING *secret;
 	STACK_OF(TSSAUTHPOLICY) *authPolicy;
+	ASN1_UTF8STRING description;
+	ASN1_BOOLEAN rsaParent;
 	ASN1_INTEGER *parent;
 	ASN1_OCTET_STRING *pubkey;
 	ASN1_OCTET_STRING *privkey;
