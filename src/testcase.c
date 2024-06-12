@@ -224,12 +224,18 @@ testcase_write_file(const char *directory, const char *name, const buffer_t *bp)
 }
 
 static buffer_t *
-testcase_read_file(const char *directory, const char *name)
+__testcase_read_file(const char *directory, const char *name, int flags)
 {
 	char path[PATH_MAX];
 
 	snprintf(path, sizeof(path), "%s/%s", directory, name);
-	return runtime_read_file(path, 0);
+	return runtime_read_file(path, flags);
+}
+
+static buffer_t *
+testcase_read_file(const char *directory, const char *name)
+{
+	return __testcase_read_file(directory, name, 0);
 }
 
 testcase_t *
@@ -314,7 +320,12 @@ testcase_record_efi_variable(testcase_t *tc, const char *name, const buffer_t *d
 buffer_t *
 testcase_playback_efi_variable(testcase_t *tc, const char *name)
 {
-	return testcase_read_file(tc->efi_directory, name);
+	/* For systems in UEFI Setup mode, there is no PK, KEK, or db, but those
+	 * variables are still recorded in the TPM event log with zero length.
+	 * Set the file reading flag to skip those EFI variable files.
+	 */
+	return __testcase_read_file(tc->efi_directory, name,
+				    RUNTIME_MISSING_FILE_OKAY);
 }
 
 void
