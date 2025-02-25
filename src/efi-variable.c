@@ -93,6 +93,159 @@ __tpm_event_efi_variable_build_event(const tpm_parsed_event_t *parsed, const voi
 	return bp;
 }
 
+#define SBATLEVELRT_VARNAME "SbatLevelRT-605dab50-e046-4300-abb6-3dd810dd8b23"
+#define SBATPOLICY_VARNAME "SbatPolicy-605dab50-e046-4300-abb6-3dd810dd8b23"
+#define SECUREBOOT_VARNAME "SecureBoot-8be4df61-93ca-11d2-aa0d-00e098032b8c"
+
+#define POLICY_LATEST		1
+#define POLICY_AUTOMATIC	2
+#define POLICY_RESET		3
+
+#define SBAT_ORIGINAL "sbat,1,2021030218\n"
+
+static bool
+parse_sbatlevel_section(buffer_t *sec, char **sbat_automatic, char **sbat_latest)
+{
+	uint32_t fmt_ver;
+	uint32_t offset_auto;
+	uint32_t offset_latest;
+
+	if (!buffer_get_u32le(sec, &fmt_ver)
+	 || !buffer_get_u32le(sec, &offset_auto)
+	 || !buffer_get_u32le(sec, &offset_latest))
+		return false;
+
+	if (offset_auto >= offset_latest)
+		return false;
+
+	if (!buffer_seek_read(sec, offset_auto + 4))
+		return false;
+	*sbat_automatic = (char *)buffer_read_pointer(sec);
+
+	if (!buffer_seek_read(sec, offset_latest + 4))
+		return false;
+	*sbat_latest = (char *)(buffer_read_pointer(sec));
+
+	return true;
+}
+
+static bool
+fetch_sbat_datestamp(const char *sbat, size_t size, uint32_t *datestamp)
+{
+	uint32_t date = 0;
+	size_t i;
+
+	/* Expected string: "sbat,X,YYYYYYYYYY\n" */
+	if (size < 17)
+		return false;
+
+	if (strncmp(sbat, "sbat,", 5) != 0)
+		return false;
+
+	for (i = 5; i < size && sbat[i] != ','; i++);
+	i++;
+	if (i >= size)
+		return false;
+
+	for (; i < size && sbat[i] != '\n'; i++) {
+		if (sbat[i] < '0' || sbat[i] > '9')
+			return false;
+		date = date * 10 + sbat[i] - '0';
+	}
+
+	*datestamp = date;
+	return true;
+}
+
+static buffer_t *
+efi_sbatlevel_get_record(buffer_t *sbatlevel)
+{
+	char *sbat_automatic;
+	char *sbat_latest;
+	const char *sbat_candidate;
+	const char *sbat_current;
+	buffer_t *buffer = NULL;
+	buffer_t *sbatlvlrt = NULL;
+	buffer_t *result = NULL;
+	uint8_t secureboot;
+	uint8_t sbatpolicy;
+	uint32_t current_date;
+	uint32_t candidate_date;
+	bool sbat_reset = false;
+
+	if (!parse_sbatlevel_section(sbatlevel, &sbat_automatic, &sbat_latest)) {
+		error("Unable to process SbatLevel\n");
+		return NULL;
+	}
+
+	buffer = runtime_read_efi_variable(SECUREBOOT_VARNAME);
+	if (buffer == NULL || !buffer_get_u8(buffer, &secureboot))
+		secureboot = 0;
+	buffer_free(buffer);
+
+	buffer = runtime_read_efi_variable(SBATPOLICY_VARNAME);
+	if (buffer == NULL || !buffer_get_u8(buffer, &sbatpolicy))
+		sbatpolicy = POLICY_AUTOMATIC;
+	buffer_free(buffer);
+
+	switch (sbatpolicy) {
+	case POLICY_LATEST:
+		sbat_candidate = sbat_latest;
+		break;
+	case POLICY_AUTOMATIC:
+		sbat_candidate = sbat_automatic;
+		break;
+	case POLICY_RESET:
+		if (secureboot == 1) {
+			infomsg("SBAT cannot be reset when Secure Boot is enabled.\n");
+			sbat_candidate = sbat_automatic;
+		} else {
+			sbat_candidate = SBAT_ORIGINAL;
+		}
+		break;
+	default:
+		error("Invalid SBAT policy\n");
+		return NULL;
+	}
+
+	if ((sbatlvlrt = runtime_read_efi_variable(SBATLEVELRT_VARNAME)) == NULL) {
+		error("Unable to read SbatLevelRT\n");
+		return NULL;
+	}
+
+	sbat_current = (const char *)buffer_read_pointer(sbatlvlrt);
+
+	if (!fetch_sbat_datestamp(sbat_current, sbatlvlrt->size, &current_date)
+	 || !fetch_sbat_datestamp(sbat_candidate, strlen(sbat_candidate), &candidate_date)) {
+		error("Unable to get SBAT timestamp\n");
+		goto fail;
+	}
+
+	debug("Current SBAT datestampe: %u\n", current_date);
+	debug("Candidate SBAT datestampe: %u\n", candidate_date);
+
+	if (current_date >= candidate_date && sbat_reset == false) {
+		debug("Use current SbatLevel\n");
+		result = sbatlvlrt;
+	} else {
+		debug("Use candidate SbatLevel\n");
+		buffer_free(sbatlvlrt);
+
+		/* Copy the candidate SbatLevel string without the terminating null */
+		if ((result = buffer_alloc_write(strlen(sbat_candidate))) == NULL
+		 || !buffer_put(result, sbat_candidate, strlen(sbat_candidate)))
+			goto fail;
+	}
+
+	return result;
+
+fail:
+	buffer_free(sbatlvlrt);
+	buffer_free(result);
+
+	return NULL;
+}
+
 enum {
 	HASH_STRATEGY_EVENT,
 	HASH_STRATEGY_DATA,
@@ -114,6 +267,11 @@ efi_variable_authority_get_record(const tpm_parsed_event_t *parsed, const char *
 	} else
 	if (!strcmp(var_short_name, "MokListRT")) {
 		db_name = "MokList";
+	} else
+	if (!strcmp(var_short_name, "SbatLevel")) {
+		if (ctx->sbatlevel != NULL)
+			return efi_sbatlevel_get_record(ctx->sbatlevel);
+		return runtime_read_efi_variable(var_name);
 	} else {
 		/* Read as-is (this could be SbatLevel, or some other variable that's not
 		 * a signature db). */

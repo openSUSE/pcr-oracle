@@ -315,6 +315,7 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	const struct efi_bsa_event *evspec = &parsed->efi_bsa_event;
 	const char *new_application;
 	struct efi_bsa_event evspec_clone;
+	buffer_t *sbatlevel;
 
 	/* Some BSA events do not refer to files, but to some data blobs residing somewhere on a device.
 	 * We're not yet prepared to handle these, so we hope the user doesn't mess with them, and
@@ -346,6 +347,14 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 			__tpm_event_efi_bsa_inspect_image(&evspec_clone);
 			evspec = &evspec_clone;
 		}
+	}
+
+	/* Set the sbatlevel section from shim.efi */
+	if (ctx->sbatlevel == NULL
+	 && (sbatlevel = pecoff_image_get_sbatlevel(evspec->img_info)) != NULL) {
+		if ((ctx->sbatlevel = buffer_alloc_write(sbatlevel->size)) == NULL
+		 || !buffer_copy(sbatlevel, sbatlevel->size, ctx->sbatlevel))
+			return NULL;
 	}
 
 	if (ctx->use_pesign)

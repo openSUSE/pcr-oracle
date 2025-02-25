@@ -212,6 +212,8 @@ typedef struct tpm_event_log_rehash_ctx {
 	/* This get set when the user specifies --next-kernel */
 	char *			boot_entry_path;
 	uapi_boot_entry_t *	boot_entry;
+
+	buffer_t *		sbatlevel;
 } tpm_event_log_rehash_ctx_t;
 
 #define GRUB_COMMAND_ARGV_MAX	32
