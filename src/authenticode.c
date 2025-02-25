@@ -91,10 +91,14 @@ struct pecoff_image_info {
 		uint16_t	machine_id;
 		uint16_t	num_sections;
 		uint32_t	symtab_offset;
+		uint32_t	num_symbols;
 		uint16_t	optional_hdr_size;
 		uint32_t	optional_hdr_offset;
 
 		uint32_t	section_table_offset;
+
+		uint32_t	strtab_offset;
+		uint32_t	strtab_size;
 	} pe_hdr;
 
 	struct {
@@ -111,6 +115,9 @@ struct pecoff_image_info {
 	pecoff_section_t *	section;
 
 	authenticode_image_info_t auth_info;
+
+	/* The contents of .sbatlevel */
+	buffer_t *		sbatlevel;
 };
 
 #define MSDOS_STUB_PE_OFFSET	0x3c
@@ -147,6 +154,7 @@ void
 pecoff_image_info_free(pecoff_image_info_t *img)
 {
 	buffer_free(img->data);
+	buffer_free(img->sbatlevel);
 	free(img->display_name);
 	free(img->data_dirs);
 	free(img->section);
@@ -351,12 +359,27 @@ __pecoff_process_header(buffer_t *in, pecoff_image_info_t *img)
 
 	if (!__pecoff_get_u32(in, img, PECOFF_HEADER_SYMTAB_POS_OFFSET, &img->pe_hdr.symtab_offset))
 		return false;
+	if (!__pecoff_get_u32(in, img, PECOFF_HEADER_SYMTAB_CNT_OFFSET, &img->pe_hdr.num_symbols))
+		return false;
 
 	img->pe_hdr.optional_hdr_offset = img->pe_hdr.offset + PECOFF_HEADER_LENGTH;
 	if (!__pecoff_get_u16(in, img, PECOFF_HEADER_OPTIONAL_HDR_SIZE_OFFSET, &img->pe_hdr.optional_hdr_size))
 		return false;
 
 	img->pe_hdr.section_table_offset = img->pe_hdr.optional_hdr_offset + img->pe_hdr.optional_hdr_size;
+
+	/* String table follows symbol table immediately.
+	 * One symbol is 18 bytes, so the offset to string table is
+	 *   symtab_offset + num_symbols * 18
+	 *
+	 * ref: https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-string-table
+	 *      https://learn.microsoft.com/en-us/windows/win32/debug/pe-format#coff-symbol-table
+	 */
+	if (img->pe_hdr.symtab_offset != 0) {
+		img->pe_hdr.strtab_offset = img->pe_hdr.symtab_offset + (img->pe_hdr.num_symbols * 18);
+		if (!__pecoff_get_u32(in, img, img->pe_hdr.strtab_offset, &img->pe_hdr.strtab_size))
+			return false;
+	}
 
 	return true;
 }
@@ -451,6 +474,27 @@ __pecoff_process_optional_header(buffer_t *in, pecoff_image_info_t *info)
 }
 
 static bool
+__pecoff_name_to_offset(char *sec_name, uint32_t *offset)
+{
+	uint32_t result = 0;
+	int i;
+
+	if (sec_name[0] != '/')
+		return false;
+
+	for (i = 1; i < 8 && sec_name[i] != '\0'; i++) {
+		if (sec_name[i] < '0' || sec_name[i] > '9')
+			return false;
+
+		result = result * 10 + sec_name[i] - '0';
+	}
+
+	*offset = result;
+
+	return true;
+}
+
+static bool
 __pecoff_process_sections(buffer_t *in, pecoff_image_info_t *info)
 {
 	unsigned int tbl_offset = info->pe_hdr.section_table_offset;
@@ -458,6 +502,9 @@ __pecoff_process_sections(buffer_t *in, pecoff_image_info_t *info)
 	buffer_t hdr;
 	unsigned int i;
 	pecoff_section_t *sec;
+	uint32_t str_offset;
+	char *long_name;
+	buffer_t *sec_buf;
 
 	pe_debug("  Processing %u sections (table at offset %u)\n", num_sections, tbl_offset);
 
@@ -483,6 +530,27 @@ __pecoff_process_sections(buffer_t *in, pecoff_image_info_t *info)
 
 		pe_debug("  Section %-8s raw %7u at 0x%08x-0x%08x\n",
 				sec->name, sec->raw.size, sec->raw.addr, sec->raw.addr + sec->raw.size);
+		/* Process the section names longer than 8 bytes */
+		long_name = NULL;
+		if (__pecoff_name_to_offset(sec->name, &str_offset) &&
+		    str_offset < info->pe_hdr.strtab_size) {
+			long_name = (char *)(in->data + info->pe_hdr.strtab_offset + str_offset);
+			pe_debug("  Long Name: %s\n", long_name);
+		}
+
+		/* Get sbatlevel from .sbatlevel section */
+		if (long_name != NULL && strcmp(long_name, ".sbatlevel") == 0) {
+			if (!(sec_buf = buffer_alloc_write(sec->raw.size)))
+				return false;
+
+			if (!buffer_seek_read(in, sec->raw.addr))
+				return false;
+
+			if (!buffer_copy(in, sec->raw.size, sec_buf))
+				return false;
+
+			info->sbatlevel = sec_buf;
+		}
 	}
 
 	/* We are supposed to sort the sections in ascending order, but we're not doing it here, we
@@ -506,6 +574,7 @@ __pecoff_show_header(pecoff_image_info_t *img)
 	pe_debug("  Architecture: %s\n", __pecoff_get_machine(img));
 	pe_debug("  Number of sections: %d\n", img->pe_hdr.num_sections);
 	pe_debug("  Symbol table position: 0x%08x\n", img->pe_hdr.symtab_offset);
+	pe_debug("  String table position: 0x%08x\n", img->pe_hdr.strtab_offset);
 	pe_debug("  Optional header size: %d\n", img->pe_hdr.optional_hdr_size);
 }
 
@@ -750,4 +819,10 @@ authenticode_get_signer(const pecoff_image_info_t *img)
 
 	cert_table_free(cert_tbl);
 	return signer;
+}
+
+buffer_t *
+pecoff_image_get_sbatlevel(pecoff_image_info_t *img)
+{
+	return img->sbatlevel;
 }
