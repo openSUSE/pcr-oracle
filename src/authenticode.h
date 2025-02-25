@@ -29,5 +29,7 @@ extern tpm_evdigest_t *	authenticode_get_digest(pecoff_image_info_t *, digest_ct
 extern cert_table_t *	authenticode_get_certificate_table(const pecoff_image_info_t *img);
 extern parsed_cert_t *	authenticode_get_signer(const pecoff_image_info_t *);
 
+extern buffer_t *	pecoff_image_get_sbatlevel(pecoff_image_info_t *);
+
 #endif /* AUTHENTICODE_H */
 
