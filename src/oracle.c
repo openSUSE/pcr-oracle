@@ -487,7 +487,7 @@ __check_stop_event(tpm_event_t *ev, int type, const char *value, tpm_event_log_s
  * Lookahead: when processing the GPT event, we need to know which hard disk
  * we're talking about.
  */
-static void
+static bool
 __predictor_lookahead_efi_partition(tpm_event_t *ev, tpm_event_log_rehash_ctx_t *ctx)
 {
 	struct efi_gpt_event *gpt = &ev->__parsed->efi_gpt_event;
@@ -502,7 +502,31 @@ __predictor_lookahead_efi_partition(tpm_event_t *ev, tpm_event_log_rehash_ctx_t 
 		if (!(parsed = ev->__parsed))
 			continue;
 
-		assign_string(&gpt->efi_partition, parsed->efi_bsa_event.efi_partition);
+		assign_string(&gpt->sys_partition, parsed->efi_bsa_event.efi_partition);
+		return true;
+	}
+	return false;
+}
+
+static void
+__predictor_lookahead_prep_partition(tpm_event_t *ev, tpm_event_log_rehash_ctx_t *ctx)
+{
+	struct efi_gpt_event *gpt = &ev->__parsed->efi_gpt_event;
+
+	while ((ev = ev->next) != NULL) {
+		tpm_parsed_event_t *parsed;
+
+		if (ev->event_type != TPM2_EVENT_COMPACT_HASH)
+			continue;
+
+		/* Compact hash events have already been parsed during the pre-scan */
+		if (!(parsed = ev->__parsed))
+			continue;
+
+		if (!parsed->compact_hash_event.prep_partition)
+			continue;
+
+		assign_string(&gpt->sys_partition, parsed->compact_hash_event.prep_partition);
 		return;
 	}
 }
@@ -727,9 +751,16 @@ predictor_update_eventlog(struct predictor *pred)
 			 * BOOT_SERVICES event that would tell us which partition we're booting
 			 * from.
 			 * Scan ahead to the first BSA event to extract the EFI partition.
+			 *
+			 * For PowerPC 64, the firmware measures the bootloader in a Compact
+			 * Hash event instead of a BSA event. If there is no BSA event, we
+			 * go further to look for the Compact Hash event to set the PReP
+			 * partition.
 			 */
-			if (ev->event_type == TPM2_EFI_GPT_EVENT)
-				__predictor_lookahead_efi_partition(ev, &rehash_ctx);
+			if (ev->event_type == TPM2_EFI_GPT_EVENT) {
+				if (!__predictor_lookahead_efi_partition(ev, &rehash_ctx))
+					__predictor_lookahead_prep_partition(ev, &rehash_ctx);
+			}
 
 			/* The shim loader emits an event that tells us which certificate it
 			 * used to verify the second stage loader. We try to predict that

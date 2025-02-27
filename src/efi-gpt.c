@@ -39,6 +39,7 @@ static const tpm_evdigest_t *	__tpm_event_efi_gpt_rehash(const tpm_event_t *, co
 static void
 __tpm_event_efi_gpt_destroy(tpm_parsed_event_t *parsed)
 {
+	drop_string(&parsed->efi_gpt_event.sys_partition);
 	drop_string(&parsed->efi_gpt_event.disk_device);
 }
 
@@ -166,14 +167,14 @@ __tpm_event_efi_gpt_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 	buffer_t *buffer = NULL;
 	char *device;
 
-	if (evspec->efi_partition == NULL) {
-		error("Cannot determine EFI partition from event log\n");
+	if (evspec->sys_partition == NULL) {
+		error("Cannot determine system partition from event log\n");
 		/* FIXME: just use the device that holds /boot/efi? */
 		return NULL;
 	}
 
-	if (!(device = runtime_disk_for_partition(evspec->efi_partition))) {
-		error("Unable to determine disk for partition %s\n", evspec->efi_partition);
+	if (!(device = runtime_disk_for_partition(evspec->sys_partition))) {
+		error("Unable to determine disk for partition %s\n", evspec->sys_partition);
 		return NULL;
 	}
 
