@@ -1,0 +1,11 @@
+uc_add_option_with libelf
+uc_with_libelf=detect
+
+uc_add_help <<EOH
+
+
+  Override libelf detection
+        --with-libelf=VERSION
+        --without-libelf
+
+EOH

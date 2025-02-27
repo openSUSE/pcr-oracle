@@ -1,0 +1,11 @@
+uc_add_option_with libfdisk
+uc_with_libfdisk=detect
+
+uc_add_help <<EOH
+
+
+  Override libfdisk detection
+        --with-libfdisk=VERSION
+        --without-libfdisk
+
+EOH
