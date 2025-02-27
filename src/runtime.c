@@ -20,6 +20,9 @@
 
 #include <sys/stat.h>
 #include <sys/mount.h>
+#include <sys/param.h>
+#include <sys/ioctl.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -27,11 +30,22 @@
 #include <errno.h>
 #include <ctype.h>
 
+#include <libelf.h>
+#include <libfdisk.h>
+#include <linux/cdrom.h>
+
 #include "runtime.h"
 #include "bufparser.h"
 #include "digest.h"
 #include "testcase.h"
 #include "util.h"
+
+#define PROC_PARTITIONS_PATH	"/proc/partitions"
+#define SYSFS_BLOCK_PATH	"/sys/block"
+
+#define GPT_PREP_UUID		"9E1A2D38-C612-4316-AA26-8B49521E5A8B"
+#define DOS_PREP_TYPE		0x41
+
 
 struct file_locator {
 	char *		partition;
@@ -290,6 +304,374 @@ runtime_read_efi_application(const char *partition, const char *application)
 	return result;
 }
 
+static bool
+is_parent_block(char *blkname)
+{
+	char buf[PATH_MAX];
+	struct stat f_stat;
+
+	/* Check /sys/block/<blkname>/dev */
+	snprintf(buf, PATH_MAX, "%s/%s/dev", SYSFS_BLOCK_PATH, blkname);
+
+	return (stat(buf, &f_stat) == 0);
+}
+
+#ifdef CDROM_GET_CAPABILITY
+static bool
+blkdev_is_cdrom(int fd)
+{
+	int ret;
+
+	if ((ret = ioctl(fd, CDROM_GET_CAPABILITY, NULL)) < 0)
+		return false;
+
+	return !!ret;
+}
+#else
+static bool
+blkdev_is_cdrom(int fd __attribute__((__unused__)))
+{
+	return false;
+}
+#endif
+
+static bool
+is_cdrom_or_tape(char *device)
+{
+	int fd;
+	bool ret;
+
+	if ((fd = open(device, O_RDONLY|O_NONBLOCK)) < 0)
+		return 0;
+	ret = blkdev_is_cdrom(fd);
+
+	close(fd);
+	return ret;
+}
+
+static char *
+next_proc_partition (FILE **f)
+{
+	char line[128 + 1];
+	char buf[PATH_MAX];
+	char devpath[PATH_MAX];
+
+	if (!*f) {
+		*f = fopen(PROC_PARTITIONS_PATH, "r");
+		if (!*f) {
+			fprintf(stderr, "cannot open %s", PROC_PARTITIONS_PATH);
+			return NULL;
+		}
+	}
+
+	/*
+	 * Example of /proc/partitions
+	 *
+	 * major minor  #blocks  name
+	 *
+	 *    8        0   41943040 sda
+	 *    8        1       8192 sda1
+	 *    8        2   41933807 sda2
+	 *  254        0   41917423 dm-0
+	 */
+	while (fgets(line, sizeof(line), *f)) {
+		if (sscanf(line, " %*d %*d %*d %128[^\n ]", buf) != 1)
+			continue;
+
+		/* The partition table is only available to the parent block device */
+		if (!is_parent_block(buf))
+			continue;
+
+		if (snprintf(devpath, PATH_MAX, "/dev/%s", buf) < 0)
+			return NULL;
+
+		if (!is_cdrom_or_tape(devpath))
+			return strdup(devpath);
+	}
+	fclose(*f);
+	*f = NULL;
+
+	return NULL;
+}
+
+static int
+is_prep_partition(struct fdisk_parttype *ptype, int is_gpt)
+{
+	const char *typestr;
+
+	if (is_gpt) {
+		typestr = fdisk_parttype_get_string(ptype);
+		return !!(strcmp(typestr, GPT_PREP_UUID) == 0);
+	} else {
+		return !!(fdisk_parttype_get_code(ptype) == DOS_PREP_TYPE);
+	}
+	return 0;
+}
+
+static char *
+locate_prep_partition_real(char *devname)
+{
+	struct fdisk_context *cxt = NULL;
+	struct fdisk_table *tb = NULL;
+	struct fdisk_iter *itr = NULL;
+	struct fdisk_partition *part = NULL;
+	struct fdisk_parttype *ptype = NULL;
+	int is_gpt = 0;
+	char *prep_dev = NULL;
+
+	cxt = fdisk_new_context();
+
+	if (fdisk_assign_device(cxt, devname, 1) < 0)
+		goto done;
+
+	/* PReP partition only in GPT or MBR */
+	if (fdisk_is_labeltype(cxt, FDISK_DISKLABEL_GPT) == 1)
+		is_gpt = 1;
+	else if (fdisk_is_labeltype(cxt, FDISK_DISKLABEL_DOS) == 1)
+		is_gpt = 0;
+	else
+		goto done;
+
+	if (fdisk_get_partitions(cxt, &tb) || fdisk_table_get_nents(tb) <= 0)
+		goto done;
+
+	itr = fdisk_new_iter(FDISK_ITER_FORWARD);
+	if (itr == NULL) {
+		error("failed to allocate fdisk iterator\n");
+		goto done;
+	}
+
+	/* Go through the partitions to find PReP partition */
+	while (fdisk_table_next_partition(tb, itr, &part) == 0) {
+		ptype = fdisk_partition_get_type(part);
+		if (ptype == NULL)
+			continue;
+
+		if (!is_prep_partition(ptype, is_gpt))
+			continue;
+
+		fdisk_partition_to_string(part, cxt,
+					  FDISK_FIELD_DEVICE,
+					  &prep_dev);
+		break;
+	}
+done:
+	if (itr)
+		fdisk_free_iter(itr);
+	if (tb)
+		fdisk_unref_table(tb);
+	fdisk_unref_context(cxt);
+
+	return prep_dev;
+}
+
+char *
+runtime_locate_prep_partition(void)
+{
+	static char prep_dev[PATH_MAX];
+	FILE *f = NULL;
+	char *devname = NULL;
+	char *prep_tmp = NULL;
+
+	if (prep_dev[0] != '\0')
+		return strdup(prep_dev);
+
+	while ((devname = next_proc_partition(&f))) {
+		prep_tmp = locate_prep_partition_real(devname);
+		free(devname);
+
+		if (prep_tmp != NULL) {
+			snprintf(prep_dev, PATH_MAX, "%s", prep_tmp);
+			break;
+		}
+	}
+
+	return prep_tmp;
+}
+
+static int
+calculate_elf32_size(Elf *elf, size_t max_size, size_t *result)
+{
+	Elf32_Ehdr *ehdr = NULL;
+	Elf32_Phdr *phdrs = NULL, *phdr = NULL;
+	Elf_Scn *scn = NULL;
+	Elf32_Shdr *shdr = NULL;
+	size_t elf_size = 0;
+	int i;
+
+	if (result == NULL)
+		return -1;
+
+	if ((ehdr = elf32_getehdr(elf)) == NULL)
+		return -1;
+
+	elf_size = ehdr->e_phoff;
+	phdrs = elf32_getphdr(elf);
+	if (phdrs == NULL)
+		return -1;
+
+	for (i = 0; i < ehdr->e_phnum; i++) {
+		phdr = phdrs + i;
+
+		elf_size = MAX(phdr->p_offset + phdr->p_filesz, elf_size);
+		if (elf_size > max_size)
+			return -1;
+	}
+
+	for (i = 0; i < ehdr->e_shnum; i++) {
+		if ((scn = elf_getscn(elf, i)) == NULL)
+			return -1;
+		if ((shdr = elf32_getshdr(scn)) == NULL)
+			return -1;
+
+		elf_size = MAX(shdr->sh_offset + shdr->sh_size, elf_size);
+		if (elf_size > max_size)
+			return -1;
+	}
+
+	*result = elf_size;
+
+	return 0;
+}
+
+static int
+calculate_elf64_size(Elf *elf, size_t max_size, size_t *result)
+{
+	Elf64_Ehdr *ehdr = NULL;
+	Elf64_Phdr *phdrs = NULL, *phdr = NULL;
+	Elf_Scn *scn = NULL;
+	Elf64_Shdr *shdr = NULL;
+	size_t elf_size = 0;
+	int i;
+
+	if (result == NULL)
+		return -1;
+
+	if ((ehdr = elf64_getehdr(elf)) == NULL)
+		return -1;
+
+	elf_size = ehdr->e_phoff;
+	phdrs = elf64_getphdr(elf);
+	if (phdrs == NULL)
+		return -1;
+
+	for (i = 0; i < ehdr->e_phnum; i++) {
+		phdr = phdrs + i;
+
+		elf_size = MAX(phdr->p_offset + phdr->p_filesz, elf_size);
+		if (elf_size > max_size)
+			return -1;
+	}
+
+	for (i = 0; i < ehdr->e_shnum; i++) {
+		if ((scn = elf_getscn(elf, i)) == NULL)
+			return -1;
+		if ((shdr = elf64_getshdr(scn)) == NULL)
+			return -1;
+
+		elf_size = MAX(shdr->sh_offset + shdr->sh_size, elf_size);
+		if (elf_size > max_size)
+			return -1;
+	}
+
+	*result = elf_size;
+
+	return 0;
+}
+
+static int
+prep_bootloader_size (block_dev_io_t *prep_io, size_t *result)
+{
+	buffer_t *buffer = NULL;
+	Elf *elf = NULL;
+	size_t part_size = 0;
+	size_t elf_size;
+	int ret = -1;
+
+	if (result == NULL)
+		return -1;
+
+	part_size = lseek(prep_io->fd, 0, SEEK_END);
+
+	/* The first two blocks (1KB) should be enough to cover all the ELF
+	 * headers (ELF headers, program headers, and section headers). */
+	if ((buffer = runtime_blockdev_read_lba(prep_io, 0, 2)) == NULL) {
+		error("Unable to read the first two blocks\n");
+		goto failed;
+	}
+
+	/* Read the ELF structure  */
+	if ((elf = elf_memory((char *)buffer->data, buffer->size)) == NULL) {
+		error("Failed to initialize Elf\n");
+		goto failed;
+	}
+
+	if (elf32_getehdr(elf) != NULL) {
+		ret = calculate_elf32_size(elf, part_size, &elf_size);
+	} else if (elf64_getehdr(elf) != NULL) {
+		ret = calculate_elf64_size(elf, part_size, &elf_size);
+	} else {
+		error("invalid ELF header\n");
+		goto failed;
+	}
+
+	if (ret < 0) {
+		error("Failed get ELF size\n");
+		goto failed;
+	}
+
+	/* Follow SLOF to round up the size */
+	elf_size = roundup(elf_size, 4);
+
+	*result = elf_size;
+
+	ret = 0;
+failed:
+	if (buffer)
+		buffer_free(buffer);
+	if (elf)
+		elf_end(elf);
+
+	return ret;
+}
+
+const tpm_evdigest_t *
+runtime_digest_prep_booloader(const tpm_algo_info_t *algo, const char *prep_partition)
+{
+	buffer_t *buffer = NULL;
+	block_dev_io_t *prep_io;
+	size_t bootloader_size = 0;
+	unsigned int nsector;
+	const tpm_evdigest_t *md = NULL;
+
+	if ((prep_io = runtime_blockdev_open(prep_partition)) == NULL) {
+		error("Unable to open disk device %s: %m\n", prep_partition);
+		goto failed;
+	}
+
+	if (prep_bootloader_size(prep_io, &bootloader_size) < 0) {
+		error("%s: unable to get bootloader size\n", prep_partition);
+		goto failed;
+	}
+
+	nsector = runtime_blockdev_bytes_to_sectors(prep_io, bootloader_size);
+
+	if ((buffer = runtime_blockdev_read_lba(prep_io, 0, nsector)) == NULL) {
+		error("%s: unable to read the full bootloader\n", prep_partition);
+		goto failed;
+	}
+
+	md = digest_compute(algo, buffer->data, bootloader_size);
+
+failed:
+	if (prep_io >= 0)
+		runtime_blockdev_close(prep_io);
+	if (buffer)
+		buffer_free(buffer);
+
+	return md;
+}
+
 char *
 runtime_disk_for_partition(const char *part_dev)
 {
@@ -398,14 +780,14 @@ runtime_blockdev_close(block_dev_io_t *io)
 	free(io);
 }
 
-unsigned int
-runtime_blockdev_bytes_to_sectors(const block_dev_io_t *io, unsigned int size)
+size_t
+runtime_blockdev_bytes_to_sectors(const block_dev_io_t *io, size_t size)
 {
 	return (size + io->sector_size - 1) / io->sector_size;
 }
 
 buffer_t *
-runtime_blockdev_read_lba(block_dev_io_t *io, unsigned int block, unsigned int count)
+runtime_blockdev_read_lba(block_dev_io_t *io, size_t block, size_t count)
 {
 	unsigned long offset = block * io->sector_size;
 	unsigned int bytes;

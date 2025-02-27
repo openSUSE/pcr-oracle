@@ -1,0 +1,6 @@
+##################################################################
+# libfdisk version
+##################################################################
+if [ -z "$uc_with_libfdisk" -o "$uc_with_libfdisk" = "detect" ]; then
+	uc_pkg_config_check_package fdisk
+fi

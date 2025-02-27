@@ -1,0 +1,6 @@
+##################################################################
+# libelf version
+##################################################################
+if [ -z "$uc_with_libelf" -o "$uc_with_libelf" = "detect" ]; then
+	uc_pkg_config_check_package libelf
+fi

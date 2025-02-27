@@ -40,13 +40,15 @@ extern buffer_t *	runtime_read_efi_variable(const char *var_name);
 extern buffer_t *	runtime_read_efi_application(const char *partition, const char *application);
 extern const tpm_evdigest_t *runtime_digest_efi_file(const tpm_algo_info_t *algo, const char *path);
 extern const tpm_evdigest_t *runtime_digest_rootfs_file(const tpm_algo_info_t *algo, const char *path);
+extern char *		runtime_locate_prep_partition(void);
+extern const tpm_evdigest_t *runtime_digest_prep_booloader(const tpm_algo_info_t *algo, const char *prep_partition);
 extern char *		runtime_disk_for_partition(const char *part_dev);
 extern char *		runtime_blockdev_by_partuuid(const char *uuid);
 extern block_dev_io_t *	runtime_blockdev_open(const char *dev);
-extern buffer_t *	runtime_blockdev_read_lba(block_dev_io_t *, unsigned int block, unsigned int count);
+extern buffer_t *	runtime_blockdev_read_lba(block_dev_io_t *, size_t block, size_t count);
 extern void		runtime_blockdev_close(block_dev_io_t *);
 
-extern unsigned int	runtime_blockdev_bytes_to_sectors(const block_dev_io_t *, unsigned int size);
+extern size_t		runtime_blockdev_bytes_to_sectors(const block_dev_io_t *, size_t size);
 
 extern void		runtime_record_testcase(testcase_t *);
 extern void		runtime_replay_testcase(testcase_t *);

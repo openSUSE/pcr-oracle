@@ -3,9 +3,11 @@ PKGNAME		= pcr-oracle-$(VERSION)
 
 CCOPT		= -O0 -g
 FIRSTBOOTDIR	= /usr/share/jeos-firstboot
-CFLAGS		= -Wall @TSS2_ESYS_CFLAGS@ @JSON_CFLAGS@ $(CCOPT)
+CFLAGS		= -Wall @TSS2_ESYS_CFLAGS@ @JSON_CFLAGS@ @FDISK_CFLAGS@ @LIBELF_CFLAGS@ $(CCOPT)
 TSS2_LINK	= -ltss2-esys -ltss2-tctildr -ltss2-rc -ltss2-mu -lcrypto
 JSON_LINK	= -L@JSON_LIBDIR@ @JSON_LIBS@
+FDISK_LINK	= @FDISK_LIBS@
+LIBELF_LINK	= @LIBELF_LIBS@
 TOOLS		= pcr-oracle
 
 MANDIR		= @MANDIR@
@@ -54,7 +56,7 @@ clean:
 	rm -rf build
 
 pcr-oracle: $(ORACLE_OBJS)
-	$(CC) -o $@ $(ORACLE_OBJS) $(TSS2_LINK) $(JSON_LINK)
+	$(CC) -o $@ $(ORACLE_OBJS) $(TSS2_LINK) $(JSON_LINK) $(FDISK_LINK) $(LIBELF_LINK)
 
 build/%.o: src/%.c
 	@mkdir -p build
