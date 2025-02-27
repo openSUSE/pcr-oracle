@@ -473,6 +473,9 @@ runtime_locate_prep_partition(void)
 	char *devname = NULL;
 	char *prep_tmp = NULL;
 
+	if (testcase_playback)
+		return testcase_playback_prep_partition(testcase_playback);
+
 	if (prep_dev[0] != '\0')
 		return strdup(prep_dev);
 
@@ -486,6 +489,8 @@ runtime_locate_prep_partition(void)
 		}
 	}
 
+	if (testcase_recording)
+		testcase_record_prep_partition(testcase_recording, prep_tmp);
 	return prep_tmp;
 }
 
