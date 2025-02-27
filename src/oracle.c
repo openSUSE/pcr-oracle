@@ -585,6 +585,12 @@ predictor_get_event_strategy(unsigned int event_type)
 		 */
 		TPM2_EFI_GPT_EVENT,
 
+		/*
+		 * EVENT_COMPACT_HASH: used by SLOF for PCR4, to measure the bootloader with
+		 *	'BOOTLOADER' in the event data.
+		 */
+		TPM2_EVENT_COMPACT_HASH,
+
 		-1,
 	};
 	static int copy_types[] = {

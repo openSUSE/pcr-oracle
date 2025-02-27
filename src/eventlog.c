@@ -1146,6 +1146,9 @@ __tpm_event_parse(tpm_event_t *ev, tpm_parsed_event_t *parsed, tpm_event_log_sca
 
 	case TPM2_EFI_GPT_EVENT:
 		return __tpm_event_parse_efi_gpt(ev, parsed, &buf);
+
+	case TPM2_EVENT_COMPACT_HASH:
+		return __tpm_event_parse_compact_hash(ev, parsed, &buf);
 	}
 
 	return false;

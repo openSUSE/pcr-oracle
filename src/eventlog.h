@@ -291,6 +291,10 @@ typedef struct tpm_parsed_event {
 			uint32_t	event_data_len;
 			char		event_data[52];
 		} tag_event;
+
+		struct compact_hash_event {
+			char *		prep_partition;
+		} compact_hash_event;
 	};
 } tpm_parsed_event_t;
 
@@ -344,4 +348,5 @@ extern const char *		shim_variable_get_full_rtname(const char *name);
 
 extern bool			secure_boot_enabled();
 
+extern bool			__tpm_event_parse_compact_hash(tpm_event_t *, tpm_parsed_event_t *, buffer_t *);
 #endif /* EVENTLOG_H */
