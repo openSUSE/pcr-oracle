@@ -47,6 +47,8 @@ extern void			testcase_record_rootfs_digest(testcase_t *, const char *path, cons
 extern const tpm_evdigest_t *	testcase_playback_rootfs_digest(testcase_t *, const char *path, const tpm_algo_info_t *algo);
 extern void			testcase_record_efi_digest(testcase_t *, const char *path, const tpm_evdigest_t *md);
 extern const tpm_evdigest_t *	testcase_playback_efi_digest(testcase_t *, const char *path, const tpm_algo_info_t *algo);
+extern void			testcase_record_prep_partition(testcase_t *, const char *path);
+extern char *			testcase_playback_prep_partition(testcase_t *);
 
 #include <stdio.h>
 

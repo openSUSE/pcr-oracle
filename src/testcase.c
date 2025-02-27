@@ -42,6 +42,7 @@ struct testcase {
 	char *			partition_directory;
 	char *			disk_directory;
 	char *			hash_log;
+	char *			prep_partition;
 
 	FILE *			hash_log_fp;
 };
@@ -598,4 +599,39 @@ const tpm_evdigest_t *
 testcase_playback_efi_digest(testcase_t *tc, const char *path, const tpm_algo_info_t *algo)
 {
 	return testcase_playback_digest(tc, "efi", path, algo);
+}
+
+void
+testcase_record_prep_partition(testcase_t *tc, const char *path)
+{
+	int fd;
+
+	if ((fd = testcase_create_file(tc->base_directory, "prep_partition")) < 0)
+		fatal("Failed to create PReP partition recording file: %m\n");
+
+	if (write(fd, path, strlen(path) + 1) < 0)
+		fatal("Failed to record PReP partition: %m\n");
+
+	close(fd);
+}
+
+char *
+testcase_playback_prep_partition(testcase_t *tc)
+{
+	int fd;
+	char buf[PATH_MAX];
+	ssize_t count;
+
+	if ((fd = testcase_open_file(tc->base_directory, "prep_partition")) < 0)
+		return NULL;
+
+	count = read(fd, buf, PATH_MAX - 1);
+	if (count < 0)
+		fatal("failed to read prep_partition: %m\n");
+
+	buf[count+1] = '\0';
+
+	close(fd);
+
+	return strdup(buf);
 }
