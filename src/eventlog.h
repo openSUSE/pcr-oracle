@@ -277,7 +277,7 @@ typedef struct tpm_parsed_event {
 		} shim_event;
 
 		struct efi_gpt_event {
-			char *		efi_partition;
+			char *		sys_partition;
 			char *		disk_device;
 		} efi_gpt_event;
 
