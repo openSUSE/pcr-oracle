@@ -677,6 +677,59 @@ failed:
 	return md;
 }
 
+
+#define GRUB_ENVBLK_SIGNATURE   "# GRUB Environment Block\n"
+#define GRUB_ENVBLK_SIZE	4096
+
+const tpm_evdigest_t *
+runtime_digest_prep_envblk(const tpm_algo_info_t *algo, const char *prep_partition)
+{
+	buffer_t *buffer = NULL;
+	block_dev_io_t *io;
+	size_t nsector, start;
+	off_t part_size;
+	const tpm_evdigest_t *md = NULL;
+
+	if ((io = runtime_blockdev_open(prep_partition)) == NULL) {
+		error("Unable to open disk device %s: %m\n", prep_partition);
+		goto failed;
+	}
+
+	if ((part_size = lseek(io->fd, 0, SEEK_END)) < 0) {
+		error("block dev seek: %m\n");
+		goto failed;
+	}
+
+	/* read the last 4096 bytes */
+	if (part_size < GRUB_ENVBLK_SIZE) {
+		error("insufficient partition size\n");
+		goto failed;
+	}
+
+	start = runtime_blockdev_bytes_to_sectors(io, part_size - GRUB_ENVBLK_SIZE);
+	nsector = runtime_blockdev_bytes_to_sectors(io, GRUB_ENVBLK_SIZE);
+
+	if ((buffer = runtime_blockdev_read_lba(io, start, nsector)) == NULL) {
+		error("%s: unable to read envblk\n", prep_partition);
+		goto failed;
+	}
+
+	if (memcmp(buffer->data, GRUB_ENVBLK_SIGNATURE, strlen(GRUB_ENVBLK_SIGNATURE)) != 0) {
+		error("%s: invalid envblk signature\n", prep_partition);
+		goto failed;
+	}
+
+	md = digest_compute(algo, buffer->data, GRUB_ENVBLK_SIZE);
+
+failed:
+	if (io >= 0)
+		runtime_blockdev_close(io);
+	if (buffer)
+		buffer_free(buffer);
+
+	return md;
+}
+
 char *
 runtime_disk_for_partition(const char *part_dev)
 {

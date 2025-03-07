@@ -84,3 +84,43 @@ __tpm_event_parse_compact_hash(tpm_event_t *ev, tpm_parsed_event_t *parsed, buff
 
 	return true;
 }
+
+/* Process PReP ENV Block */
+static void
+__tpm_event_grub_envblk_destroy(tpm_parsed_event_t *parsed)
+{
+	drop_string(&parsed->grub_envblk_event.prep_partition);
+}
+
+static const char *
+__tpm_event_grub_envblk_describe(const tpm_parsed_event_t *parsed)
+{
+	return "GRUB ENV Block";
+}
+
+static const tpm_evdigest_t *
+__tpm_event_grub_envblk_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
+{
+	const struct grub_envblk_event *evspec = &parsed->grub_envblk_event;
+
+	if (evspec->prep_partition == NULL)
+		return NULL;
+
+	return runtime_digest_prep_envblk(ctx->algo, evspec->prep_partition);;
+}
+
+bool
+__tpm_event_grub_envblk_event_parse(tpm_event_t *ev, tpm_parsed_event_t *parsed, const char *value)
+{
+	struct grub_envblk_event *evspec = &parsed->grub_envblk_event;
+
+	parsed->destroy = __tpm_event_grub_envblk_destroy;
+	parsed->describe = __tpm_event_grub_envblk_describe;
+	parsed->rehash = __tpm_event_grub_envblk_rehash;
+
+	/* Locate the PReP partition */
+	if (!(evspec->prep_partition = runtime_locate_prep_partition()))
+		return false;
+
+	return true;
+}
