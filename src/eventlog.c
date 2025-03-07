@@ -1089,6 +1089,8 @@ __tpm_event_parse_tag(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
 	return true;
 }
 
+#define GRUB_PREP_ENVBLK "PReP ENV Block"
+
 static bool
 __tpm_event_parse_ipl(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
 {
@@ -1109,8 +1111,12 @@ __tpm_event_parse_ipl(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
 	if (ev->pcr_index == 8)
 		return __tpm_event_grub_command_event_parse(ev, parsed, value);
 
-	if (ev->pcr_index == 9)
-		return __tpm_event_grub_file_event_parse(ev, parsed, value);
+	if (ev->pcr_index == 9) {
+		if (strncmp(value, GRUB_PREP_ENVBLK, strlen(GRUB_PREP_ENVBLK)) == 0)
+			return __tpm_event_grub_envblk_event_parse(ev, parsed, value);
+		else
+			return __tpm_event_grub_file_event_parse(ev, parsed, value);
+	}
 
 	if (ev->pcr_index == 12)
 		return __tpm_event_systemd_event_parse(ev, parsed, value, len);

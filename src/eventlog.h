@@ -295,6 +295,10 @@ typedef struct tpm_parsed_event {
 		struct compact_hash_event {
 			char *		prep_partition;
 		} compact_hash_event;
+
+		struct grub_envblk_event {
+			char *		prep_partition;
+		} grub_envblk_event;
 	};
 } tpm_parsed_event_t;
 
@@ -349,4 +353,5 @@ extern const char *		shim_variable_get_full_rtname(const char *name);
 extern bool			secure_boot_enabled();
 
 extern bool			__tpm_event_parse_compact_hash(tpm_event_t *, tpm_parsed_event_t *, buffer_t *);
+extern bool			__tpm_event_grub_envblk_event_parse(tpm_event_t *, tpm_parsed_event_t *, const char *);
 #endif /* EVENTLOG_H */

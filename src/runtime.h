@@ -42,6 +42,7 @@ extern const tpm_evdigest_t *runtime_digest_efi_file(const tpm_algo_info_t *algo
 extern const tpm_evdigest_t *runtime_digest_rootfs_file(const tpm_algo_info_t *algo, const char *path);
 extern char *		runtime_locate_prep_partition(void);
 extern const tpm_evdigest_t *runtime_digest_prep_booloader(const tpm_algo_info_t *algo, const char *prep_partition);
+extern const tpm_evdigest_t *runtime_digest_prep_envblk(const tpm_algo_info_t *algo, const char *prep_partition);
 extern char *		runtime_disk_for_partition(const char *part_dev);
 extern char *		runtime_blockdev_by_partuuid(const char *uuid);
 extern block_dev_io_t *	runtime_blockdev_open(const char *dev);
