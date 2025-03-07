@@ -291,9 +291,9 @@ efi_variable_authority_get_record(const tpm_parsed_event_t *parsed, const char *
 		db_name = "MokList";
 	} else
 	if (!strcmp(var_short_name, "SbatLevel")) {
-		if (ctx->sbatlevel != NULL)
-			return efi_sbatlevel_get_record(ctx->sbatlevel);
-		return runtime_read_efi_variable(var_name);
+		if (ctx->sbatlevel == NULL)
+			fatal("No reference .sbatlevel section. Please add PCR4 into the PCR index list\n");
+		return efi_sbatlevel_get_record(ctx->sbatlevel);
 	} else {
 		/* Read as-is (this could be SbatLevel, or some other variable that's not
 		 * a signature db). */
