@@ -100,6 +100,7 @@ __tpm_event_efi_variable_build_event(const tpm_parsed_event_t *parsed, const voi
 #define POLICY_LATEST		1
 #define POLICY_AUTOMATIC	2
 #define POLICY_RESET		3
+#define POLICY_NOTREAD		255
 
 #define SBAT_ORIGINAL "sbat,1,2021030218\n"
 
@@ -169,12 +170,18 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 	buffer_t *result = NULL;
 	uint8_t secureboot;
 	uint8_t sbatpolicy;
+	uint32_t auto_date;
 	uint32_t current_date;
 	uint32_t candidate_date;
 	bool sbat_reset = false;
 
 	if (!parse_sbatlevel_section(sbatlevel, &sbat_automatic, &sbat_latest)) {
 		error("Unable to process SbatLevel\n");
+		return NULL;
+	}
+
+	if (!fetch_sbat_datestamp(sbat_automatic, strlen(sbat_automatic), &auto_date)) {
+		error("Unable to get datestamp of SBAT automatic\n");
 		return NULL;
 	}
 
@@ -185,7 +192,7 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 
 	buffer = runtime_read_efi_variable(SBATPOLICY_VARNAME);
 	if (buffer == NULL || !buffer_get_u8(buffer, &sbatpolicy))
-		sbatpolicy = POLICY_AUTOMATIC;
+		sbatpolicy = POLICY_NOTREAD;
 	buffer_free(buffer);
 
 	switch (sbatpolicy) {
@@ -200,7 +207,22 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 			infomsg("SBAT cannot be reset when Secure Boot is enabled.\n");
 			sbat_candidate = sbat_automatic;
 		} else {
+			sbat_reset = true;
 			sbat_candidate = SBAT_ORIGINAL;
+		}
+		break;
+	case POLICY_NOTREAD:
+		if (secureboot == 1) {
+			sbat_candidate = sbat_automatic;
+		} else {
+			/* shim 15.8 always resets SbatLevel when Secure Boot is disabled.
+			 * The automatic datestamp of shim 15.8 is 2023012900. */
+			if (auto_date >= 2023012900) {
+				sbat_reset = true;
+				sbat_candidate = SBAT_ORIGINAL;
+			} else {
+				sbat_candidate = sbat_automatic;
+			}
 		}
 		break;
 	default:
@@ -217,12 +239,12 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 
 	if (!fetch_sbat_datestamp(sbat_current, sbatlvlrt->size, &current_date)
 	 || !fetch_sbat_datestamp(sbat_candidate, strlen(sbat_candidate), &candidate_date)) {
-		error("Unable to get SBAT timestamp\n");
+		error("Unable to get SBAT datestamp\n");
 		goto fail;
 	}
 
-	debug("Current SBAT datestampe: %u\n", current_date);
-	debug("Candidate SBAT datestampe: %u\n", candidate_date);
+	debug("Current SBAT datestamp: %u\n", current_date);
+	debug("Candidate SBAT datestamp: %u\n", candidate_date);
 
 	if (current_date >= candidate_date && sbat_reset == false) {
 		debug("Use current SbatLevel\n");
