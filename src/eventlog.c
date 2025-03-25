@@ -657,6 +657,7 @@ __tpm_event_grub_file_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pa
 
 	debug("  re-hashing %s\n", __tpm_event_grub_file_describe(parsed));
 	if (evspec->device == NULL || !strcmp(evspec->device, "crypto0")
+	   || !strncmp(evspec->device, "cryptouuid", strlen("cryptouuid"))
 	   || !strncmp("/boot/", evspec->path, 6)) {
 		debug("  assuming the file resides on system partition\n");
 		md = runtime_digest_rootfs_file(ctx->algo, evspec->path);
