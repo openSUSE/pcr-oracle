@@ -197,6 +197,21 @@ fail:
 tpm_rsa_key_t *
 tpm_rsa_generate(unsigned int bits)
 {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
+	EVP_PKEY *pkey = NULL;
+
+	pkey = EVP_RSA_gen(bits);
+	if (!pkey)
+		goto failed;
+
+	return tpm_rsa_key_alloc("<generated>", pkey, true);
+
+failed:
+	error("Failed to generate %u bit RSA key\n", bits);
+	if (pkey)
+		EVP_PKEY_free(pkey);
+	return NULL;
+#else /* OpenSSL < 3.0 */
 	BIGNUM *exp = NULL;
 	RSA *rsa = NULL;
 	EVP_PKEY *pkey = NULL;
@@ -227,6 +242,7 @@ failed:
 	if (exp)
 		BN_free(exp);
 	return NULL;
+#endif
 }
 
 int
