@@ -26,17 +26,7 @@ typedef struct {
 	ASN1_OCTET_STRING *CommandPolicy;
 } TSSOPTPOLICY;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000
-DECLARE_STACK_OF(TSSOPTPOLICY);
-#define sk_TSSOPTPOLICY_new_null() SKM_sk_new_null(TSSOPTPOLICY)
-#define sk_TSSOPTPOLICY_push(sk, policy) SKM_sk_push(TSSOPTPOLICY, sk, policy)
-#define sk_TSSOPTPOLICY_pop(sk) SKM_sk_pop(TSSOPTPOLICY, sk)
-#define sk_TSSOPTPOLICY_free(sk) SKM_sk_free(TSSOPTPOLICY, sk)
-#define sk_TSSOPTPOLICY_num(policy) SKM_sk_num(TSSOPTPOLICY, policy)
-#define sk_TSSOPTPOLICY_value(policy, i) SKM_sk_value(TSSOPTPOLICY, policy, i)
-#else
 DEFINE_STACK_OF(TSSOPTPOLICY);
-#endif
 
 /*
  * Define the format of optional authorization policy.  The policy for
@@ -56,17 +46,7 @@ typedef struct {
 	STACK_OF(TSSOPTPOLICY) *policy;
 } TSSAUTHPOLICY;
 
-#if OPENSSL_VERSION_NUMBER < 0x10100000
-DECLARE_STACK_OF(TSSAUTHPOLICY);
-#define sk_TSSAUTHPOLICY_new_null() SKM_sk_new_null(TSSAUTHPOLICY)
-#define sk_TSSAUTHPOLICY_push(sk, policy) SKM_sk_push(TSSAUTHPOLICY, sk, policy)
-#define sk_TSSAUTHPOLICY_pop(sk) SKM_sk_pop(TSSAUTHPOLICY, sk)
-#define sk_TSSAUTHPOLICY_free(sk) SKM_sk_free(TSSAUTHPOLICY, sk)
-#define sk_TSSAUTHPOLICY_num(policy) SKM_sk_num(TSSAUTHPOLICY, policy)
-#define sk_TSSAUTHPOLICY_value(policy, i) SKM_sk_value(TSSAUTHPOLICY, policy, i)
-#else
 DEFINE_STACK_OF(TSSAUTHPOLICY);
-#endif
 
 /*
  * Define the format of a TPM key file.
