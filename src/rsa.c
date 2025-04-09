@@ -26,9 +26,7 @@
 #include <openssl/pem.h>
 #include <tss2_esys.h>
 
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
-#endif
 
 #include "util.h"
 #include "rsa.h"
@@ -197,7 +195,6 @@ fail:
 tpm_rsa_key_t *
 tpm_rsa_generate(unsigned int bits)
 {
-#if OPENSSL_VERSION_NUMBER >= 0x30000000L
 	EVP_PKEY *pkey = NULL;
 
 	pkey = EVP_RSA_gen(bits);
@@ -211,38 +208,6 @@ failed:
 	if (pkey)
 		EVP_PKEY_free(pkey);
 	return NULL;
-#else /* OpenSSL < 3.0 */
-	BIGNUM *exp = NULL;
-	RSA *rsa = NULL;
-	EVP_PKEY *pkey = NULL;
-
-	exp = BN_new();
-	if (!BN_set_word(exp, RSA_F4))
-		goto failed;
-
-	rsa = RSA_new();
-	if (!RSA_generate_key_ex(rsa, bits, exp, NULL))
-		goto failed;
-
-	BN_free(exp);
-	exp = NULL;
-
-	pkey = EVP_PKEY_new();
-	if (!EVP_PKEY_set1_RSA(pkey, rsa))
-		goto failed;
-
-	return tpm_rsa_key_alloc("<generated>", pkey, true);
-
-failed:
-	error("Failed to generate %u bit RSA key\n", bits);
-	if (pkey)
-		EVP_PKEY_free(pkey);
-	else if (rsa)
-		RSA_free(rsa);
-	if (exp)
-		BN_free(exp);
-	return NULL;
-#endif
 }
 
 int
@@ -346,17 +311,6 @@ failed:
 TPM2B_PUBLIC *
 tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key)
 {
-#if OPENSSL_VERSION_NUMBER < 0x30000000L
-	RSA *rsa;
-	const BIGNUM *n, *e;
-
-	if (!(rsa = EVP_PKEY_get0_RSA(key->pkey))) {
-		error("%s: cannot extract RSA modulus and exponent - EVP_PKEY_get0_RSA failed\n", key->path);
-		return NULL;
-	}
-
-	RSA_get0_key(rsa, &n, &e, NULL);
-#else
 	BIGNUM *n = NULL, *e = NULL;
 
 	if (!EVP_PKEY_get_bn_param(key->pkey, OSSL_PKEY_PARAM_RSA_N, &n)) {
@@ -367,7 +321,6 @@ tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key)
 		error("%s: cannot extract RSA exponent\n", key->path);
 		return NULL;
 	}
-#endif
 	return rsa_pubkey_alloc(n, e, key->path);
 }
 

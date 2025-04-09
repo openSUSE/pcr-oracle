@@ -1,0 +1,10 @@
+uc_add_option_with libcrypto
+uc_with_libcrypto=detect
+
+uc_add_help <<EOH
+
+  Override libcrypto detection
+        --with-libcrypto=VERSION
+        --without-libcrypto
+
+EOH

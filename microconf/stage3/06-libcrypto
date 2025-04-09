@@ -1,0 +1,13 @@
+##################################################################
+# libcrypto version
+##################################################################
+if [ -z "$uc_with_libcrypto" -o "$uc_with_libcrypto" = "detect" ]; then
+	uc_pkg_config_check_package libcrypto
+
+	min_ver="3.0.0"
+
+	if [ ! -z "$uc_with_libcrypto" ] && [[ "$uc_with_libcrypto" < "$min_ver" ]]; then
+		echo "Error: Requires openSSL >= $min_ver"
+		exit 1
+	fi
+fi
