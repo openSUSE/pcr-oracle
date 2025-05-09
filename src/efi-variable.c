@@ -347,6 +347,56 @@ __tpm_event_efi_variable_detect_hash_strategy(const tpm_event_t *ev, const tpm_p
 	return HASH_STRATEGY_DATA; /* no idea what would be right */
 }
 
+static const unsigned char uefi_global_guid[16] =
+	{0xcb, 0xb2, 0x19, 0xd7,
+	 0x3a, 0x3d,
+	 0x96, 0x45,
+	 0xa3, 0xbc,
+	 0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f};
+static const unsigned char shim_variable_guid[16] =
+	{0x50, 0xab, 0x5d, 0x60,
+	 0x46, 0xe0,
+	 0x00, 0x43,
+	 0xab, 0xb6,
+	 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23};
+
+static tpm_parsed_event_t *
+efi_variable_get_parsed_alt (const tpm_parsed_event_t *parsed)
+{
+	tpm_parsed_event_t *parsed_alt = NULL;
+	const char *var_short_name;
+
+	if (parsed->event_type != TPM2_EFI_VARIABLE_AUTHORITY)
+		return NULL;
+
+	var_short_name = parsed->efi_variable_event.variable_name;
+
+	if (!strcmp(var_short_name, "db") || !strcmp(var_short_name, "MokListRT"))
+		return NULL;
+
+	parsed_alt = malloc(sizeof(tpm_parsed_event_t));
+	if (parsed_alt == NULL)
+		return NULL;
+
+	memcpy(parsed_alt, parsed, sizeof(tpm_parsed_event_t));
+
+	/* Set the alternative database: "MokListRT" <==> "db" */
+	if (!strcmp(var_short_name, "db")) {
+		memcpy(parsed_alt->efi_variable_event.variable_guid, shim_variable_guid, 16);
+		parsed_alt->efi_variable_event.variable_name = "MokListRT";
+	} else
+	if (!strcmp(var_short_name, "MokListRT")) {
+		memcpy(parsed_alt->efi_variable_event.variable_guid, uefi_global_guid, 16);
+		parsed_alt->efi_variable_event.variable_name = "db";
+	}
+
+	/* No event data for this synthesized parsed event */
+	parsed_alt->efi_variable_event.len = 0;
+	parsed_alt->efi_variable_event.data = NULL;
+
+	return parsed_alt;
+}
+
 static const tpm_evdigest_t *
 __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
 {
@@ -357,6 +407,8 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 	buffer_t *file_data = NULL, *event_data = NULL, *data_to_hash = NULL;
 	const tpm_evdigest_t *md = NULL;
 	int hash_strategy;
+	char *var_name_alt = NULL;
+	tpm_parsed_event_t *parsed_alt = NULL;
 
 	if (!(var_name = tpm_efi_variable_event_extract_full_varname(parsed)))
 		fatal("Unable to extract EFI variable name from EFI_VARIABLE event\n");
@@ -381,6 +433,34 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 			 */
 			md = tpm_event_get_digest(ev, algo);
 			goto out;
+		} else
+		if (file_data == NULL && (parsed_alt = efi_variable_get_parsed_alt(parsed))) {
+			/* If the signer of the next application is not available in the
+			 * specified EFI variable of the EFI_VARIABLE_AUTHORITY event,
+			 * we may need to look for the signer in another database.
+			 *
+			 * For example, a testing GRUB2 may be signed with a testing key
+			 * enrolled in UEFI db while the original GRUB2 is verified by
+			 * the certificate in MokListRT. After installing the testing GRUB2,
+			 * the corresponding EFI_VARIABLE_AUTHORITY event will change
+			 * in the next boot with signing authority from UEFI db instead of
+			 * MokListRT. To predict the EFI_VARIABLE_AUTHORITY event,
+			 * 'parsed_alt' is created to contain the path to the alternative
+			 * database so we can look for signing authority in the alternative
+			 * database. */
+			var_name_alt = (char *)tpm_efi_variable_event_extract_full_varname(parsed_alt);
+			if (var_name_alt == NULL)
+				fatal("Unable to extract EFI variable name from EFI_VARIABLE event(alt)\n");
+			debug("Looking for signing authority in alternative database\n");
+			file_data = efi_variable_authority_get_record(parsed_alt, var_name_alt, ctx);
+			if (file_data == NULL) {
+				warning("Failed to find authority record\n");
+				var_name_alt = NULL;
+				free(parsed_alt);
+				parsed_alt = NULL;
+			} else {
+				warning("Signing authority from different database!\n");
+			}
 		}
 	} else {
 		file_data = runtime_read_efi_variable(var_name);
@@ -402,14 +482,16 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 	buffers_to_free[num_buffers_to_free++] = file_data;
 
 	if (hash_strategy == HASH_STRATEGY_EVENT) {
-		event_data = __tpm_event_efi_variable_build_event(parsed,
+		event_data = __tpm_event_efi_variable_build_event(
+				parsed_alt ? parsed_alt : parsed,
 				buffer_read_pointer(file_data),
 				buffer_available(file_data));
 		if (event_data == NULL)
 			fatal("Unable to re-marshal EFI variable for hashing\n");
 
 		if (opt_debug > 1) {
-			debug("  Remarshaled event for EFI variable %s:\n", var_name);
+			debug("  Remarshaled event for EFI variable %s:\n",
+				 var_name_alt ? var_name_alt : var_name);
 			hexdump(buffer_read_pointer(event_data),
 				buffer_available(event_data),
 				debug, 8);
@@ -428,6 +510,8 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 out:
 	while (num_buffers_to_free)
 		buffer_free(buffers_to_free[--num_buffers_to_free]);
+	if (parsed_alt)
+		free(parsed_alt);
 	return md;
 }
 
