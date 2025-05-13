@@ -12,7 +12,7 @@
 # Invoke with --help for a description of options
 #
 # microconf:begin
-# version 0.5.5
+# version 0.5.6
 # require libtss2
 # require json
 # disable debug-authenticode
