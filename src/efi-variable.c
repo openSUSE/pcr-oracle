@@ -371,7 +371,7 @@ efi_variable_get_parsed_alt (const tpm_parsed_event_t *parsed)
 
 	var_short_name = parsed->efi_variable_event.variable_name;
 
-	if (!strcmp(var_short_name, "db") || !strcmp(var_short_name, "MokListRT"))
+	if (strcmp(var_short_name, "db") != 0 && strcmp(var_short_name, "MokListRT") != 0)
 		return NULL;
 
 	parsed_alt = malloc(sizeof(tpm_parsed_event_t));
