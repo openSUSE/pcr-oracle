@@ -1142,52 +1142,6 @@ pcr_authorized_policy_seal_secret(const target_platform_t *platform, const char 
 	return ok;
 }
 
-bool
-old_pcr_authorized_policy_seal_secret(const char *authpolicy_path, const char *input_path, const char *output_path)
-{
-	ESYS_CONTEXT *esys_context = tss_esys_context();
-	TPM2B_DIGEST *authorized_policy = NULL;
-	TPM2B_SENSITIVE_DATA *secret = NULL;
-	TPM2B_PRIVATE *sealed_private = NULL;
-	TPM2B_PUBLIC *sealed_public = NULL;
-	ESYS_TR srk_handle = ESYS_TR_NONE;
-	bool ok = false;
-
-	if (!(secret = read_secret(input_path)))
-		goto cleanup;
-
-	if (!(authorized_policy = read_digest(authpolicy_path)))
-		goto cleanup;
-
-	/* On my machine, the TPM needs 20 seconds to derive the SRK in CreatePrimary */
-	infomsg("Sealing secret - this may take a moment\n");
-
-	if (!esys_create_primary(esys_context, &srk_handle))
-		goto cleanup;
-
-	if (!esys_create(esys_context, srk_handle, authorized_policy, secret, &sealed_private, &sealed_public))
-		goto cleanup;
-
-	ok = write_sealed_secret(output_path, sealed_public, sealed_private);
-
-	if (ok)
-		infomsg("Sealed secret written to %s\n", output_path?: "(standard output)");
-
-cleanup:
-	if (sealed_private)
-		free(sealed_private);
-	if (sealed_public)
-		free(sealed_public);
-	if (authorized_policy)
-		free(authorized_policy);
-	if (secret)
-		free_secret(secret);
-
-	esys_flush_context(esys_context, &srk_handle);
-	return ok;
-}
-
-
 /*
  * The "signing" part of using authorized policies consists of hashing together the set of
  * expected PCR values, and signing the resulting digest.
