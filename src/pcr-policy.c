@@ -477,7 +477,7 @@ __pcr_bank_hash(ESYS_CONTEXT *esys_context, const tpm_pcr_bank_t *bank, TPM2B_DI
 
 	rc = Esys_HashSequenceStart(esys_context, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
 			&null_auth,
-			bank->algo_info->tcg_id,
+			TPM2_ALG_SHA256,
 			&sequence_handle);
 
 	if (!tss_check_error(rc, "Esys_HashSequenceStart failed"))
