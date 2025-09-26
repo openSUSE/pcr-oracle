@@ -338,9 +338,8 @@ tpm_rsa_bits_test(unsigned int rsa_bits)
 			ESYS_TR_NONE, &rsa_parms);
 	if (rc == TSS2_RC_SUCCESS)
 		okay = true;
-	else if (rc != (TPM2_RC_VALUE | TPM2_RC_P | TPM2_RC_1)) {
-		tss_check_error(rc, "Esys_CreatePrimary failed");
-	}
+	else if (rc != (TPM2_RC_VALUE | TPM2_RC_P | TPM2_RC_1))
+		tss_check_error(rc, "Esys_TestParms failed");
 
 	return okay;
 }
