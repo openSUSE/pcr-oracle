@@ -28,6 +28,9 @@
 extern uint32_t		esys_tr_rh_null;
 extern uint32_t		esys_tr_rh_owner;
 
+extern TPM2B_PUBLIC	RSA_SRK_template;
+extern TPM2B_PUBLIC	ECC_SRK_template;
+
 extern ESYS_CONTEXT *	tss_esys_context(void);
 extern void		tss_print_error(int rc, const char *msg);
 

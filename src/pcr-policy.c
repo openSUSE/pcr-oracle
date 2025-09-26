@@ -62,7 +62,7 @@ struct target_platform {
 					const stored_key_t *public_key_file);
 };
 
-static TPM2B_PUBLIC RSA_SRK_template = {
+TPM2B_PUBLIC RSA_SRK_template = {
 	.size = sizeof(TPMT_PUBLIC),
 	.publicArea = {
 		.type = TPM2_ALG_RSA,
@@ -88,7 +88,7 @@ static TPM2B_PUBLIC RSA_SRK_template = {
 	}
 };
 
-static TPM2B_PUBLIC ECC_SRK_template = {
+TPM2B_PUBLIC ECC_SRK_template = {
 	.size = sizeof(TPMT_PUBLIC),
 	.publicArea = {
 		.type = TPM2_ALG_ECC,
