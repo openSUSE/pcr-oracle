@@ -262,6 +262,36 @@ tpm_check_capabilities(void)
 	return true;
 }
 
+static bool
+tpm_check_srk(void)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	TPMT_PUBLIC_PARMS parms = {0};
+	TSS2_RC rc;
+
+	/* Test RSA SRK */
+	parms.type = TPM2_ALG_RSA;
+	memcpy(&parms.parameters, &RSA_SRK_template.publicArea.parameters,
+	       sizeof(TPMU_PUBLIC_PARMS));
+
+	rc = Esys_TestParms(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &parms);
+	if (rc != TSS2_RC_SUCCESS)
+		return tss_check_error(rc, "RSA SRK test failed");
+
+	memset(&parms, 0, sizeof(TPMT_PUBLIC_PARMS));
+
+	/* Test ECC SRK */
+	parms.type = TPM2_ALG_ECC;
+	memcpy(&parms.parameters, &ECC_SRK_template.publicArea.parameters,
+	       sizeof(TPMU_PUBLIC_PARMS));
+
+	rc = Esys_TestParms(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &parms);
+	if (rc != TSS2_RC_SUCCESS)
+		return tss_check_error(rc, "ECC SRK test failed");
+
+	return true;
+}
+
 bool
 tpm_selftest(bool fulltest)
 {
@@ -275,6 +305,10 @@ tpm_selftest(bool fulltest)
 
 	/* Capability check */
 	if(!tpm_check_capabilities())
+		return false;
+
+	/* SRK template test */
+	if (!tpm_check_srk())
 		return false;
 
 	return true;
