@@ -67,10 +67,11 @@ extern bool		pcr_policy_sign(const target_platform_t *platform, const tpm_pcr_ba
 				const char *input_path,
 				const char *output_path, const char *policy_name);
 extern bool		pcr_authorized_policy_seal_secret(const target_platform_t *platform,
-				const char *authorized_policy, const char *input_path,
-				const char *output_path);
-extern bool		pcr_seal_secret(const target_platform_t *, const tpm_pcr_bank_t *bank,
+				const char *opt_persistent_srk, const char *authorized_policy,
 				const char *input_path, const char *output_path);
+extern bool		pcr_seal_secret(const target_platform_t *, const tpm_pcr_bank_t *bank,
+				const char *opt_persistent_srk, const char *input_path,
+				const char *output_path);
 extern bool		pcr_unseal_secret(const target_platform_t *,
 				const tpm_pcr_selection_t *pcr_selection,
 				const char *signed_policy_path,

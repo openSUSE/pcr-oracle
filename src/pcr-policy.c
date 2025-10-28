@@ -47,6 +47,7 @@ struct target_platform {
 	unsigned int	unseal_flags;
 
 	bool		(*write_sealed_secret)(const char *pathname,
+					const TPM2_HANDLE persistent_addr,
 					const TPML_PCR_SELECTION *pcr_sel,
 					const TPM2B_PRIVATE *sealed_private,
 					const TPM2B_PUBLIC *sealed_public);
@@ -660,6 +661,69 @@ esys_create_primary(ESYS_CONTEXT *esys_context, ESYS_TR *handle_ret)
 }
 
 static bool
+esys_make_handle_persistent(ESYS_CONTEXT *esys_context, ESYS_TR handle, TPMI_DH_PERSISTENT persistent_handle, ESYS_TR *obj_handle)
+{
+	ESYS_TR tmp_obj;
+	TSS2_RC rc;
+
+	if (obj_handle == NULL)
+		return false;
+
+	/* Try to make the object persistent */
+	infomsg("Making SRK persistent in 0x%X\n", persistent_handle);
+	rc = Esys_EvictControl(esys_context,
+			ESYS_TR_RH_OWNER,	/* auth */
+			handle,			/* objectHandle */
+			ESYS_TR_PASSWORD,	/* shandle1 */
+			ESYS_TR_NONE,		/* shandle2 */
+			ESYS_TR_NONE,		/* shandle3 */
+			persistent_handle,	/* persistentHandle */
+			obj_handle		/* newObjectHandle */
+		);
+
+	/* If a persistent object already exists in the persistent handle (address),
+	 * TPM2_EvictControl returns TPM2_RC_NV_DEFINED. */
+	if (rc == TSS2_RC_SUCCESS)
+		return true;
+	else if (rc != TPM2_RC_NV_DEFINED && !tss_check_error(rc, "Esys_EvictControl failed"))
+		return false;
+
+	/* Remove the object from the specified persistent handle (address) */
+	infomsg("Removing the previous persistent object from 0x%X\n", persistent_handle);
+	rc = Esys_TR_FromTPMPublic(esys_context, persistent_handle,
+			ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE, &tmp_obj);
+	if (!tss_check_error(rc, "Esys_TR_FromTPMPublic failed"))
+		return false;
+	rc = Esys_EvictControl(esys_context,
+			ESYS_TR_RH_OWNER,	/* auth */
+			tmp_obj,		/* objectHandle */
+			ESYS_TR_PASSWORD,	/* shandle1 */
+			ESYS_TR_NONE,		/* shandle2 */
+			ESYS_TR_NONE,		/* shandle3 */
+			persistent_handle,	/* persistentHandle */
+			&tmp_obj		/* newObjectHandle */
+		);
+	if (!tss_check_error(rc, "Esys_EvictControl failed"))
+		return false;
+
+	/* Try again to make the object persistent */
+	infomsg("Making SRK persistent in 0x%X again\n", persistent_handle);
+	rc = Esys_EvictControl(esys_context,
+			ESYS_TR_RH_OWNER,	/* auth */
+			handle,			/* objectHandle */
+			ESYS_TR_PASSWORD,	/* shandle1 */
+			ESYS_TR_NONE,		/* shandle2 */
+			ESYS_TR_NONE,		/* shandle3 */
+			persistent_handle,	/* persistentHandle */
+			obj_handle		/* newObjectHandle */
+		);
+	if (!tss_check_error(rc, "Esys_EvictControl failed"))
+		return false;
+
+	return true;
+}
+
+static bool
 esys_create(ESYS_CONTEXT *esys_context,
 		ESYS_TR srk_handle, TPM2B_DIGEST *authorized_policy, TPM2B_SENSITIVE_DATA *secret,
 		TPM2B_PRIVATE **out_private, TPM2B_PUBLIC **out_public)
@@ -690,12 +754,14 @@ esys_create(ESYS_CONTEXT *esys_context,
 static bool
 esys_seal_secret(const target_platform_t *platform, ESYS_CONTEXT *esys_context,
 		 TPM2B_DIGEST *policy, const TPML_PCR_SELECTION *pcr_sel,
-		 const char *input_path, const char *output_path)
+		 const char *opt_persistent_srk,  const char *input_path, const char *output_path)
 {
 	TPM2B_SENSITIVE_DATA *secret = NULL;
 	TPM2B_PRIVATE *sealed_private = NULL;
 	TPM2B_PUBLIC *sealed_public = NULL;
 	ESYS_TR srk_handle = ESYS_TR_NONE;
+	ESYS_TR obj_handle = ESYS_TR_NONE;
+	TPM2_HANDLE persistent_handle = 0;
 	bool ok = false;
 
 	if (!(secret = read_secret(input_path)))
@@ -706,10 +772,24 @@ esys_seal_secret(const target_platform_t *platform, ESYS_CONTEXT *esys_context,
 	if (!esys_create_primary(esys_context, &srk_handle))
 		goto cleanup;
 
+	/* Make SRK persistent if requested */
+	if (opt_persistent_srk != NULL) {
+		/* Convert opt_persistent_srk to TPM2 handle */
+		persistent_handle = strtoul(opt_persistent_srk, NULL, 16);
+		if ((persistent_handle >> TPM2_HR_SHIFT) != TPM2_HT_PERSISTENT) {
+			error("Not a valid persistent handle, e.g. 0x81000000\n");
+			goto cleanup;
+		}
+
+		if (!esys_make_handle_persistent(esys_context, srk_handle,
+						 persistent_handle, &obj_handle))
+			goto cleanup;
+	}
+
 	if (!esys_create(esys_context, srk_handle, policy, secret, &sealed_private, &sealed_public))
 		goto cleanup;
 
-	ok = platform->write_sealed_secret(output_path, pcr_sel, sealed_private, sealed_public);
+	ok = platform->write_sealed_secret(output_path, persistent_handle, pcr_sel, sealed_private, sealed_public);
 	if (ok)
 		infomsg("Sealed secret written to %s\n", output_path?: "(standard output)");
 
@@ -1052,7 +1132,7 @@ pcr_store_public_key(const stored_key_t *private_key_file, const stored_key_t *p
 
 bool
 pcr_seal_secret(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
-		const char *input_path, const char *output_path)
+		const char *opt_persistent_srk, const char *input_path, const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *pcr_policy = NULL;
@@ -1066,7 +1146,7 @@ pcr_seal_secret(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 		return false;
 
 	ok = esys_seal_secret(platform, esys_context, pcr_policy, &pcr_sel,
-			      input_path, output_path);
+			      opt_persistent_srk, input_path, output_path);
 
 	free(pcr_policy);
 	return ok;
@@ -1127,7 +1207,8 @@ pcr_authorized_policy_create(const tpm_pcr_selection_t *pcr_selection, const sto
 
 bool
 pcr_authorized_policy_seal_secret(const target_platform_t *platform, const char *authpolicy_path,
-				  const char *input_path, const char *output_path)
+				  const char *opt_persistent_srk, const char *input_path,
+				  const char *output_path)
 {
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	TPM2B_DIGEST *authorized_policy = NULL;
@@ -1137,7 +1218,7 @@ pcr_authorized_policy_seal_secret(const target_platform_t *platform, const char 
 		return false;
 
 	ok = esys_seal_secret(platform, esys_context, authorized_policy, NULL,
-			      input_path, output_path);
+			      opt_persistent_srk, input_path, output_path);
 	free(authorized_policy);
 	return ok;
 }
@@ -1450,6 +1531,7 @@ tpm2key_unseal_secret(const char *input_path, const char *output_path,
 	buffer_t buf;
 	TPM2B_PUBLIC pub = { 0 };
 	TPM2B_PRIVATE priv = { 0 };
+	TPM2_HANDLE tmp_handle;
 	ESYS_TR primary_handle = ESYS_TR_NONE;
 	ESYS_TR sealed_object_handle = ESYS_TR_NONE;
 	TPM2B_SENSITIVE_DATA *unsealed = NULL;
@@ -1474,7 +1556,14 @@ tpm2key_unseal_secret(const char *input_path, const char *output_path,
 	if (rc != TSS2_RC_SUCCESS)
 		goto cleanup;
 
-	if (!esys_create_primary(esys_context, &primary_handle))
+	tmp_handle = ASN1_INTEGER_get(tpm2key->parent);
+	if ((tmp_handle >> TPM2_HR_SHIFT) == TPM2_HT_PERSISTENT) {
+		rc = Esys_TR_FromTPMPublic(esys_context, tmp_handle,
+				ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+				&primary_handle);
+		if (!tss_check_error(rc, "Esys_TR_FromTPMPublic failed"))
+			goto cleanup;
+	} else if (!esys_create_primary(esys_context, &primary_handle))
 		goto cleanup;
 
 	rc = Esys_Load(esys_context, primary_handle,
@@ -1543,6 +1632,7 @@ pcr_unseal_secret(const target_platform_t *platform,
  */
 static bool
 oldgrub_write_sealed_secret(const char *pathname,
+					const TPM2_HANDLE persistent_addr,
 					const TPML_PCR_SELECTION *pcr_sel,
 					const TPM2B_PRIVATE *sealed_private,
 					const TPM2B_PUBLIC *sealed_public)
@@ -1583,14 +1673,21 @@ oldgrub_unseal_secret(const char *input_path, const char *output_path,
  */
 static bool
 tpm2key_write_sealed_secret(const char *pathname,
+					const TPM2_HANDLE persistent_addr,
 					const TPML_PCR_SELECTION *pcr_sel,
 					const TPM2B_PRIVATE *sealed_private,
 					const TPM2B_PUBLIC *sealed_public)
 {
 	TSSPRIVKEY *tpm2key = NULL;
+	TPM2_HANDLE parent;
 	bool ok = false;
 
-	if (!tpm2key_basekey(&tpm2key, TPM2_RH_OWNER, sealed_public, sealed_private))
+	if (persistent_addr == 0)
+		parent = TPM2_RH_OWNER;
+	else
+		parent = persistent_addr;
+
+	if (!tpm2key_basekey(&tpm2key, parent, sealed_public, sealed_private))
 		goto cleanup;
 
 	if (SRK_template->publicArea.type == TPM2_ALG_RSA)

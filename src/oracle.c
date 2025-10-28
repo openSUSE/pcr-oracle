@@ -104,6 +104,7 @@ enum {
 	OPT_TARGET_PLATFORM,
 	OPT_BOOT_ENTRY,
 	OPT_COMPARE_CURRENT,
+	OPT_PERSISTENT_SRK,
 };
 
 static struct option options[] = {
@@ -139,6 +140,7 @@ static struct option options[] = {
 	{ "target-platform",	required_argument,	0,	OPT_TARGET_PLATFORM },
 	{ "next-kernel",	required_argument,	0,	OPT_BOOT_ENTRY },
 	{ "compare-current",	no_argument,		0,	OPT_COMPARE_CURRENT },
+	{ "persistent-srk",	required_argument,	0,	OPT_PERSISTENT_SRK },
 
 	{ NULL }
 };
@@ -1175,6 +1177,7 @@ main(int argc, char **argv)
 	char *opt_target_platform = NULL;
 	char *opt_boot_entry = NULL;
 	bool opt_compare_current = false;
+	char *opt_persistent_srk = NULL;
 	const target_platform_t *target;
 	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
@@ -1280,6 +1283,9 @@ main(int argc, char **argv)
 			break;
 		case OPT_COMPARE_CURRENT:
 			opt_compare_current = true;
+			break;
+		case OPT_PERSISTENT_SRK:
+			opt_persistent_srk = optarg;
 			break;
 		case 'h':
 			usage(0, NULL);
@@ -1443,7 +1449,7 @@ main(int argc, char **argv)
 	/* When sealing a secret against an authorized policy, there's no need to
 	 * mess around with PCR values. That's the beauty of it... */
 	if (action == ACTION_SEAL && opt_authorized_policy) {
-		if (!pcr_authorized_policy_seal_secret(target, opt_authorized_policy, opt_input, opt_output))
+		if (!pcr_authorized_policy_seal_secret(target, opt_authorized_policy, opt_persistent_srk, opt_input, opt_output))
 			return 1;
 
 		return 0;
@@ -1491,7 +1497,7 @@ main(int argc, char **argv)
 			predictor_report(pred);
 	} else
 	if (action == ACTION_SEAL) {
-		if (!pcr_seal_secret(target, &pred->prediction, opt_input, opt_output))
+		if (!pcr_seal_secret(target, &pred->prediction, opt_persistent_srk, opt_input, opt_output))
 			return 1;
 	} else
 	if (action == ACTION_SIGN) {
