@@ -53,7 +53,8 @@ tpm2key_basekey(TSSPRIVKEY **tpm2key, const TPM2_HANDLE parent,
 	key->type = OBJ_txt2obj(OID_sealedData, 1);
 	key->emptyAuth = 1;
 	key->parent = ASN1_INTEGER_new();
-	ASN1_INTEGER_set(key->parent, parent);
+	/* Convert 'parent' to 'int32_t' to make sure 'parent' only occupies at most 4 bytes */
+	ASN1_INTEGER_set(key->parent, (int32_t)parent);
 
 	key->pubkey = ASN1_OCTET_STRING_new();
 	ASN1_STRING_set(key->pubkey, bp_pub->data, buffer_available(bp_pub));
