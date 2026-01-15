@@ -826,21 +826,12 @@ no_action:
 	return okay;
 }
 
-static const char *
-get_next_arg(int *index_p, int argc, char **argv)
-{
-	int i = *index_p;
-
-	if (i >= argc)
-		usage(1, "Missing argument\n");
-	*index_p += 1;
-	return argv[i];
-}
+static const char *next_argument(int argc, char **argv);
 
 static bool
 predictor_update_all(struct predictor *pred, int argc, char **argv)
 {
-	int i = 0, pcr_index = -1;
+	int pcr_index = -1;
 
 	if (!strcmp(pred->initial_source, "eventlog")) {
 		if (!predictor_update_eventlog(pred))
@@ -856,14 +847,17 @@ predictor_update_all(struct predictor *pred, int argc, char **argv)
 			mask >>= 1;
 	}
 
-	while (i < argc) {
+	/* Check if there is any argument following the PCR selection
+	 * NOTE: Those arugments (string, file, and eventlog) only work
+	 *       when only one PCR is selected. */
+	while (optind < argc) {
 		const char *type, *arg;
 
-		type = get_next_arg(&i, argc, argv);
+		type = next_argument(argc, argv);
 		if (isdigit(*type)) {
 			if (!parse_pcr_index(type, (unsigned int *) &pcr_index))
 				fatal("unable to parse PCR index \"%s\"\n", type);
-			type = get_next_arg(&i, argc, argv);
+			type = next_argument(argc, argv);
 		}
 
 		if (!strcmp(type, "eventlog")) {
@@ -871,7 +865,7 @@ predictor_update_all(struct predictor *pred, int argc, char **argv)
 			continue;
 		}
 
-		arg = get_next_arg(&i, argc, argv);
+		arg = next_argument(argc, argv);
 		if (pcr_index < 0) {
 			fprintf(stderr, "Unable to infer which PCR to update for %s %s\n", type, arg);
 			usage(1, NULL);
@@ -1321,10 +1315,12 @@ main(int argc, char **argv)
 		fatal("Unsupported target platform %s\n", opt_target_platform);
 
 	/* Validate options */
+	/* ACTION_PREDICT, ACTION_SEAL, and ACTION_SIGN may need to extend the
+	 * selected PCR further with a 'string' or 'file'. For those actions,
+	 * argument parsing is ended after predictor_update_all(). */
 	switch (action) {
 	case ACTION_PREDICT:
 		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
-		end_arguments(argc, argv);
 		break;
 
 	case ACTION_STORE_PUBLIC_KEY:
@@ -1349,7 +1345,8 @@ main(int argc, char **argv)
 	case ACTION_SEAL:
 		if (opt_authorized_policy == NULL)
 			pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
-		end_arguments(argc, argv);
+		else
+			end_arguments(argc, argv);
 		break;
 
 	case ACTION_UNSEAL:
@@ -1377,7 +1374,6 @@ main(int argc, char **argv)
 			usage(1, "You need to specify the --output option when signing a policy\n");
 
 		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
-		end_arguments(argc, argv);
 		break;
 
 	case ACTION_SELFTEST:
@@ -1479,8 +1475,11 @@ main(int argc, char **argv)
 		runtime_replay_testcase(tc_playback);
 	}
 
-	if (!predictor_update_all(pred, argc - optind, argv + optind))
+	if (!predictor_update_all(pred, argc, argv))
 		return 1;
+
+	/* No more argument parsing */
+	end_arguments(argc, argv);
 
 	if (action == ACTION_PREDICT) {
 		if (opt_verify)
