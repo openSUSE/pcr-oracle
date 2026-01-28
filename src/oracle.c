@@ -948,7 +948,7 @@ compare_events(struct predictor *pred, struct predictor *pred_cmp,
 	tpm_event_t *ev, *ev_cmp;
 	const tpm_evdigest_t *predicted_digest, *cmp_digest;
 
-	for(ev = pred->event_log, ev_cmp = pred_cmp->event_log; ev; ev = ev->next, ev_cmp = ev_cmp->next) {
+	for(ev = pred->event_log, ev_cmp = pred_cmp->event_log; ev; ev = ev->next) {
 		bool stop = false;
 		stop = (ev == stop_event);
 		if (stop && !pred->stop_event.after) {
