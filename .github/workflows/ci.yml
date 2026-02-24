@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    name: Test on ${{ matrix.os-name }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os-name: "openSUSE Tumbleweed"
+            container-image: "registry.opensuse.org/opensuse/tumbleweed:latest"
+          - os-name: "openSUSE Leap 16.0"
+            container-image: "registry.opensuse.org/opensuse/leap:16.0"
+
+    container:
+      image: ${{ matrix.container-image }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        zypper --non-interactive ref
+        zypper --non-interactive in \
+          autoconf automake gcc make \
+          pkg-config tpm2.0-tools swtpm \
+          libtss2-tcti-swtpm0 diffutils \
+          systemd systemd-devel \
+          tpm2-0-tss-devel libjson-c-devel \
+          libopenssl-devel libfdisk-devel \
+          libelf-devel
+
+    - name: Build the code
+      run: |
+        ./configure
+        make -j$(nproc)
+
+    - name: Run the test scripts
+      run: |
+        # Set up the swtpm instance
+        mkdir -p /tmp/swtpm-state
+        swtpm socket --tpm2 \
+          --flags startup-clear \
+          --server type=unixio,path=/tmp/swtpm-sock \
+          --ctrl type=unixio,path=/tmp/swtpm-sock.ctrl \
+          --log level=20 \
+          --tpmstate dir=/tmp/swtpm-state -d
+        export TPM2TOOLS_TCTI="swtpm:path=/tmp/swtpm-sock"
+        export PCRORACLE_TCTI="swtpm:path=/tmp/swtpm-sock"
+
+        # Run the test scripts
+        ./test-pcr.sh
+        ./test-systemd.sh
+        ./test-tpm2key.sh
+        ./test-authorized.sh
