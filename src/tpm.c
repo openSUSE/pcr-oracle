@@ -65,8 +65,19 @@ tss_esys_context(void)
 
 	if (esys_ctx == NULL) {
 		TSS2_RC rc;
+		TSS2_RC rc_tcti;
+		char *tcti_env = NULL;
+		TSS2_TCTI_CONTEXT *tcti = NULL;
 
-		rc = Esys_Initialize(&esys_ctx, NULL, NULL);
+		tcti_env = getenv("PCRORACLE_TCTI");
+		if (tcti_env != NULL) {
+			infomsg("Using TCTI env: %s\n", tcti_env);
+			rc_tcti = Tss2_TctiLdr_Initialize(tcti_env, &tcti);
+			if (!tss_check_error(rc_tcti, "Failed to initialize TCTI context"))
+				tcti = NULL;
+		}
+
+		rc = Esys_Initialize(&esys_ctx, tcti, NULL);
 		if (!tss_check_error(rc, "Unable to initialize TSS2 ESAPI context"))
 			fatal("Aborting.\n");
 
