@@ -444,7 +444,7 @@ __check_stop_event(tpm_event_t *ev, int type, const char *value, tpm_event_log_s
 			return false;
 
 		grub_cmd = grub_arg;
-		while (grub_cmd != NULL && !isalpha(*grub_cmd))
+		while (grub_cmd != NULL && *grub_cmd != '\0' && !isalpha(*grub_cmd))
 			grub_cmd++;
 
 		return !strcmp(grub_cmd, value);
