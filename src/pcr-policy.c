@@ -1130,6 +1130,23 @@ pcr_store_public_key(const stored_key_t *private_key_file, const stored_key_t *p
 	return okay;
 }
 
+static void
+print_pcr_bank (const tpm_pcr_bank_t *bank)
+{
+	unsigned int pcr_index, i;
+	const tpm_evdigest_t *pcr;
+
+	for (pcr_index = 0; pcr_index < PCR_BANK_REGISTER_MAX; ++pcr_index) {
+		if (pcr_bank_register_is_valid(bank, pcr_index)) {
+			pcr = &bank->pcr[pcr_index];
+			printf("%s:%u ", bank->algo_name, pcr_index);
+			for (i = 0; i < pcr->size; i++)
+				printf("%02x", pcr->data[i]);
+			printf("\n");
+		}
+	}
+}
+
 bool
 pcr_seal_secret(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 		const char *opt_persistent_srk, const char *input_path, const char *output_path)
@@ -1147,6 +1164,11 @@ pcr_seal_secret(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 
 	ok = esys_seal_secret(platform, esys_context, pcr_policy, &pcr_sel,
 			      opt_persistent_srk, input_path, output_path);
+
+	if (ok) {
+		infomsg("Sealed with PCR policy\n");
+		print_pcr_bank(bank);
+	}
 
 	free(pcr_policy);
 	return ok;
@@ -1256,8 +1278,10 @@ pcr_policy_sign(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 	okay = platform->write_signed_policy(input_path, output_path,
 			policy_name, bank, pcr_policy,
 			rsa_key, signed_policy);
-	if (okay)
+	if (okay) {
 		infomsg("Signed PCR policy written to %s\n", output_path?: "(standard output)");
+		print_pcr_bank(bank);
+	}
 
 out:
 	if (pcr_policy)
