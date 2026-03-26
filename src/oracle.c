@@ -983,6 +983,9 @@ compare_events(struct predictor *pred, struct predictor *pred_cmp,
 					return false;
 				}
 			}
+
+			/* Nothing to process. Advance the comparison event pointer */
+			ev_cmp = ev_cmp->next;
 		}
 
 		if (stop) {
