@@ -43,6 +43,7 @@ static bool			__tpm_event_efi_bsa_extract_location(tpm_parsed_event_t *parsed);
 static bool			__tpm_event_efi_bsa_inspect_image(struct efi_bsa_event *evspec);
 
 static bool			__is_shim_issue(const tpm_event_t *ev, const struct efi_bsa_event *evspec);
+static bool			__is_shim_extra_file(const tpm_event_t *ev, const struct efi_bsa_event *evspec, tpm_event_log_scan_ctx_t *ctx, bool is_fullpath);
 
 static void
 __tpm_event_efi_bsa_destroy(tpm_parsed_event_t *parsed)
@@ -89,6 +90,7 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 	struct efi_bsa_event *evspec = &parsed->efi_bsa_event;
 	size_t device_path_len;
 	buffer_t path_buf;
+	bool is_fullpath = false;
 
 	parsed->destroy = __tpm_event_efi_bsa_destroy;
 	parsed->print = __tpm_event_efi_bsa_print;
@@ -109,11 +111,12 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 	 && evspec->efi_application) {
 		/* If a previous BSA event specified a device path with a partition,
 		 * then the next event may omit it. */
-		if (evspec->efi_partition != NULL)
+		if (evspec->efi_partition != NULL) {
 			assign_string(&ctx->efi_partition, evspec->efi_partition);
-		else
+			is_fullpath = true;
+		} else {
 			assign_string(&evspec->efi_partition, ctx->efi_partition);
-		__tpm_event_efi_bsa_inspect_image(evspec);
+		}
 	}
 
 	/* When the shim issue is present the efi_application will be
@@ -124,6 +127,22 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 	if (__is_shim_issue(ev, evspec))
 		assign_string(&evspec->efi_partition, ctx->efi_partition);
 
+	/* TPM events for shim extra files do not record the actual file paths
+	 * in their device path payload. Until a reliable method to resolve the
+	 * real paths on disk is implemented, we default to the COPY strategy for
+	 * these events to bypass rehashing.
+	 */
+	if (__is_shim_extra_file(ev, evspec, ctx, is_fullpath)) {
+		ev->rehash_strategy = EVENT_STRATEGY_COPY;
+		evspec->shim_extra_file = true;
+	}
+
+	if (evspec->efi_application) {
+		if (is_fullpath == true && ctx->first_application == NULL)
+			assign_string(&ctx->first_application, evspec->efi_application);
+
+		__tpm_event_efi_bsa_inspect_image(evspec);
+	}
 
 	return true;
 }
@@ -307,6 +326,27 @@ static bool __is_shim_issue(const tpm_event_t *ev, const struct efi_bsa_event *e
 	 * without path.
 	 */
 	return (secure_boot_enabled() && ev->pcr_index == 4 && !evspec->efi_application);
+}
+
+static bool
+__is_shim_extra_file(const tpm_event_t *ev, const struct efi_bsa_event *evspec, tpm_event_log_scan_ctx_t *ctx, bool is_fullpath)
+{
+	/* When secure boot is enabled, shim calls verify_image() to measure
+	 * the extra files (revocations_sbat.efi, revocations_sku.efi, and
+	 * shim_certificate*.efi) into PCR 4.
+	 *
+	 * The device path in these TPM events contains only the file path node.
+	 * Furthermore, this path always points to the shim image itself rather
+	 * than the specific extra file being measured.
+	 */
+	if (is_fullpath || !secure_boot_enabled() || ev->pcr_index != 4
+	 || ctx->first_application == NULL || evspec->efi_application == NULL)
+		return false;
+
+	if (strcmp(ctx->first_application, evspec->efi_application) != 0)
+		return false;
+
+	return true;
 }
 
 static const tpm_evdigest_t *

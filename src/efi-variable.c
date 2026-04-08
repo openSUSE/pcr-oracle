@@ -418,6 +418,15 @@ __tpm_event_efi_variable_rehash(const tpm_event_t *ev, const tpm_parsed_event_t 
 		return NULL;
 
 	if (ev->event_type == TPM2_EFI_VARIABLE_AUTHORITY) {
+		/* Until we can reliably resolve the actual file path of a shim extra
+		 * file, we cannot extract its signer to verify this
+		 * TPM2_EFI_VARIABLE_AUTHORITY event.
+		 */
+		if (ctx->next_is_extra_file) {
+			md = tpm_event_get_digest(ev, algo);
+			goto out;
+		}
+
 		/* For certificate related variables, EFI_VARIABLE_AUTHORITY events don't return the
 		 * entire DB, but only the record that was used in verifying the application's
 		 * authenticode signature. */

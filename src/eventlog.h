@@ -195,6 +195,7 @@ enum {
  */
 typedef struct tpm_event_log_scan_ctx {
 	char *			efi_partition;
+	char *			first_application;
 } tpm_event_log_scan_ctx_t;
 
 /*
@@ -208,6 +209,7 @@ typedef struct tpm_event_log_rehash_ctx {
 	bool			use_pesign;		/* compute authenticode FP using external pesign application */
 
 	const pecoff_image_info_t *next_stage_img;
+	bool			next_is_extra_file;
 
 	/* This get set when the user specifies --next-kernel */
 	char *			boot_entry_path;
@@ -255,6 +257,8 @@ typedef struct tpm_parsed_event {
 			/* extracted from device_path: */
 			char *		efi_partition;
 			char *		efi_application;
+
+			bool		shim_extra_file;
 
 			/* If we can find an on-disk EFI application for it, try to
 			 * inspect the PECOFF image and extract useful stuff. */
