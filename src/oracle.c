@@ -559,6 +559,7 @@ __predictor_lookahead_shim_loaded(tpm_event_t *ev, tpm_event_log_rehash_ctx_t *c
 				parsed->efi_bsa_event.efi_partition,
 				parsed->efi_bsa_event.efi_application);
 		ctx->next_stage_img = parsed->efi_bsa_event.img_info;
+		ctx->next_is_extra_file = parsed->efi_bsa_event.shim_extra_file;
 
 #ifdef TESTING_ONLY
 		if (ctx->next_stage_img) {
