@@ -29,6 +29,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <ctype.h>
+#include <dirent.h>
 
 #include <libelf.h>
 #include <libfdisk.h>
@@ -302,6 +303,79 @@ runtime_read_efi_application(const char *partition, const char *application)
 		testcase_record_efi_application(testcase_recording, partition, application, result);
 
 	return result;
+}
+
+buffer_t *
+runtime_read_efi_directory(const char *partition, const char *directory)
+{
+	file_locator_t *loc;
+	const char *fullpath;
+	DIR *dir;
+	struct dirent *dir_ent;
+	buffer_t *buf = NULL;
+	unsigned int total_len = 0;
+	char newline = '\n';
+	char null = '\0';
+
+	if (testcase_playback)
+		return testcase_playback_efi_directory(testcase_playback, partition, directory);
+
+	loc = runtime_locate_file(partition, directory);
+	if (!loc) {
+		debug("Failed to locate EFI directory: (%s)%s\n", partition, directory);
+		return NULL;
+	}
+
+	fullpath = file_locator_get_full_path(loc);
+	dir = opendir(fullpath);
+	if (!dir) {
+		debug("Failed to open directory: %s\n", fullpath);
+		file_locator_free(loc);
+		return NULL;
+	}
+
+	/* Calculate the exact buffer size needed */
+	while ((dir_ent = readdir(dir)) != NULL) {
+		if (!strcmp(dir_ent->d_name, ".") || !strcmp(dir_ent->d_name, ".."))
+			continue;
+		/* Add the length of the filename plus the newline */
+		total_len += strlen(dir_ent->d_name) + 1;
+	}
+
+	if (total_len == 0) {
+		closedir(dir);
+		file_locator_free(loc);
+		return buffer_alloc_write(0);
+	}
+
+	/* Allocate the exact buffer size needed */
+	buf = buffer_alloc_write(total_len + 1);
+	if (!buf) {
+		error("Out of memory allocating directory buffer\n");
+		closedir(dir);
+		file_locator_free(loc);
+		return NULL;
+	}
+
+	/* Pack the strings plus the newline sequentially into the buffer */
+	rewinddir(dir);
+	while ((dir_ent = readdir(dir)) != NULL) {
+		if (!strcmp(dir_ent->d_name, ".") || !strcmp(dir_ent->d_name, ".."))
+			continue;
+
+		buffer_put(buf, dir_ent->d_name, strlen(dir_ent->d_name));
+		buffer_put(buf, &newline, 1);
+	}
+
+	buffer_put(buf, &null, 1);
+
+	closedir(dir);
+	file_locator_free(loc);
+
+	if (buf && testcase_recording)
+		testcase_record_efi_directory(testcase_recording, partition, directory, buf);
+
+	return buf;
 }
 
 static bool
