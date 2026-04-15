@@ -84,6 +84,119 @@ __tpm_event_efi_bsa_describe(const tpm_parsed_event_t *parsed)
 	return result;
 }
 
+static char *
+__extract_efi_directory(const char *efi_application)
+{
+	char *efi_directory = NULL;
+	char *last_slash;
+
+	if (efi_application == NULL)
+		return NULL;
+
+	efi_directory = strdup(efi_application);
+	if (efi_directory == NULL) {
+		error("Failed to allocate memory for efi directory\n");
+		return NULL;
+	}
+
+	last_slash = strrchr(efi_directory, '/');
+	if (last_slash == NULL) {
+		error("Invalid path\n");
+		free(efi_directory);
+		return NULL;
+	}
+
+	if (last_slash == efi_directory)
+		*(last_slash + 1) = '\0';
+	else
+		*last_slash = '\0';
+
+	return efi_directory;
+}
+
+static file_list_t *
+__shim_extra_files_init(const struct efi_bsa_event *evspec)
+{
+	file_list_t *head = NULL, *tail, *node;
+	buffer_t *raw_list = NULL;
+	char *efi_directory;
+	const char *str_ptr;
+	char filename[PATH_MAX];
+	char filepath[PATH_MAX];
+	int offset = 0;
+	int ret;
+
+	if (evspec->efi_partition == NULL || evspec->efi_application == NULL)
+		return NULL;
+
+	efi_directory = __extract_efi_directory(evspec->efi_application);
+	if (efi_directory == NULL) {
+		error("unable to extract directory\n");
+		return NULL;
+	}
+
+	raw_list = runtime_read_efi_directory(evspec->efi_partition, efi_directory);
+	if (raw_list == NULL || raw_list->size <= 2) {
+		debug("Empty directory (%s)\n", efi_directory);
+		goto out;
+	}
+	str_ptr = buffer_read_pointer(raw_list);
+
+	/* Shim loads and measures extra files in the exact order they appear in
+	 * the directory. We must preserve this file system order when building our
+	 * list to accurately predict the PCR sequence.
+	 */
+	while(sscanf(str_ptr, "%[^\n]\n%n", filename, &offset) == 1) {
+		str_ptr += offset;
+
+		if (strcasecmp(filename, "revocations_sbat.efi") == 0 ||
+		    strcasecmp(filename, "revocations_sku.efi") == 0 ||
+		    (strncasecmp(filename, "shim_certificate", 16) == 0 &&
+		     path_has_file_extension(filename, ".efi"))) {
+
+			node = calloc(1, sizeof(file_list_t));
+			if (node == NULL) {
+				error("Failed to allocate a file_list_t node\n");
+				goto out;
+			}
+
+			/* Construct the full file path */
+			ret = snprintf(filepath, sizeof(filepath), "%s/%s", efi_directory, filename);
+			if (ret >= sizeof(filepath)) {
+				error("File path too long: (%s/%s)\n", efi_directory, filename);
+				goto out;
+			}
+
+			node->filepath = strdup(filepath);
+			if (node->filepath == NULL) {
+				error("Failed to duplicate filepath(%s)\n", filepath);
+				goto out;
+			}
+
+			/* Append the filepath to the list */
+			if (head) {
+				tail->next = node;
+				tail = node;
+			} else {
+				head = node;
+				tail = node;
+			}
+		}
+
+		if (*str_ptr == '\0')
+			break;
+	}
+
+out:
+	if (efi_directory)
+		free(efi_directory);
+
+	if (raw_list)
+		buffer_free(raw_list);
+
+	return head;
+}
+
 bool
 __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp, tpm_event_log_scan_ctx_t *ctx)
 {
@@ -128,13 +241,36 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 		assign_string(&evspec->efi_partition, ctx->efi_partition);
 
 	/* TPM events for shim extra files do not record the actual file paths
-	 * in their device path payload. Until a reliable method to resolve the
-	 * real paths on disk is implemented, we default to the COPY strategy for
-	 * these events to bypass rehashing.
+	 * in their device path payload. We have to scan the directory of the
+	 * shim image to locate the actual extra files.
 	 */
 	if (__is_shim_extra_file(ev, evspec, ctx, is_fullpath)) {
-		ev->rehash_strategy = EVENT_STRATEGY_COPY;
-		evspec->shim_extra_file = true;
+		/* Get the shim extra file list on demand */
+		if (ctx->shim_extra.head == NULL) {
+			file_list_t *list;
+
+			list = __shim_extra_files_init(evspec);
+			if (list == NULL) {
+				error("Failed to get shim extra file list\n");
+				return false;
+			}
+
+			ctx->shim_extra.head = list;
+			ctx->shim_extra.cur = list;
+		}
+
+		/* Replace evspec->efi_application with the most likely file path
+		 * for the extra file.
+		 */
+		if (ctx->shim_extra.cur != NULL) {
+			drop_string(&evspec->efi_application);
+			assign_string(&evspec->efi_application, ctx->shim_extra.cur->filepath);
+			ctx->shim_extra.cur = ctx->shim_extra.cur->next;
+			debug("Update efi_application: %s\n", evspec->efi_application);
+		} else {
+			error("Failed to locate shim extra file\n");
+			return false;
+		}
 	}
 
 	if (evspec->efi_application) {
