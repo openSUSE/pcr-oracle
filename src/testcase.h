@@ -39,6 +39,8 @@ extern void			testcase_block_dev_close(testcase_block_dev_t *);
 extern int			testcase_playback_sysfs_file(testcase_t *, const char *);
 extern buffer_t *		testcase_playback_efi_variable(testcase_t *, const char *name);
 extern buffer_t *		testcase_playback_efi_application(testcase_t *, const char *partition, const char *application);
+extern void			testcase_record_efi_directory(testcase_t *tc, const char *partition, const char *directory, const buffer_t *data);
+extern buffer_t *		testcase_playback_efi_directory(testcase_t *tc, const char *partition, const char *directory);
 extern char *			testcase_playback_partition_uuid(testcase_t *, const char *uuid);
 extern char *			testcase_playback_partition_disk(testcase_t *, const char *dev_name);
 extern int			testcase_playback_block_dev(testcase_t *, const char *dev_path);
