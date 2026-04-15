@@ -1198,5 +1198,17 @@ tpm_event_log_scan_ctx_init(tpm_event_log_scan_ctx_t *ctx)
 void
 tpm_event_log_scan_ctx_destroy(tpm_event_log_scan_ctx_t *ctx)
 {
+	file_list_t *cur, *next;
+
 	drop_string(&ctx->efi_partition);
+	drop_string(&ctx->first_application);
+
+	cur = ctx->shim_extra.head;
+
+	while (cur != NULL) {
+		next = cur->next;
+		free(cur->filepath);
+		free(cur);
+		cur = next;
+	}
 }

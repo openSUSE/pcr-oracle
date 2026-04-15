@@ -190,12 +190,23 @@ enum {
 	EVENT_STRATEGY_NO_ACTION,
 };
 
+typedef struct file_list {
+	char * 			filepath;
+	struct file_list *	next;
+} file_list_t;
+
+typedef struct extra_files {
+	file_list_t *		head;
+	file_list_t *		cur;
+} extra_files_t;
+
 /*
  * This is used while scanning the event log.
  */
 typedef struct tpm_event_log_scan_ctx {
 	char *			efi_partition;
 	char *			first_application;
+	extra_files_t 		shim_extra;
 } tpm_event_log_scan_ctx_t;
 
 /*
@@ -209,7 +220,6 @@ typedef struct tpm_event_log_rehash_ctx {
 	bool			use_pesign;		/* compute authenticode FP using external pesign application */
 
 	const pecoff_image_info_t *next_stage_img;
-	bool			next_is_extra_file;
 
 	/* This get set when the user specifies --next-kernel */
 	char *			boot_entry_path;
