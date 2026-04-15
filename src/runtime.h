@@ -38,6 +38,7 @@ extern buffer_t *	runtime_read_file(const char *pathname, int flags);
 extern bool		runtime_write_file(const char *pathname, buffer_t *);
 extern buffer_t *	runtime_read_efi_variable(const char *var_name);
 extern buffer_t *	runtime_read_efi_application(const char *partition, const char *application);
+extern buffer_t *	runtime_read_efi_directory(const char *partition, const char *directory);
 extern const tpm_evdigest_t *runtime_digest_efi_file(const tpm_algo_info_t *algo, const char *path);
 extern const tpm_evdigest_t *runtime_digest_rootfs_file(const tpm_algo_info_t *algo, const char *path);
 extern char *		runtime_locate_prep_partition(void);
