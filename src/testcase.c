@@ -353,6 +353,31 @@ testcase_playback_efi_application(testcase_t *tc, const char *partition, const c
 }
 
 void
+testcase_record_efi_directory(testcase_t *tc, const char *partition, const char *directory, const buffer_t *data)
+{
+	char path[PATH_MAX];
+
+	partition = get_basename(partition);
+
+	/* Append a dummy filename to avoid file-vs-directory collisions on the OS.
+	 * This ensures the path correctly resolves to a file inside the requested folder.
+	 */
+	snprintf(path, sizeof(path), "%s/%s/.dir_list", partition, directory);
+	testcase_write_file(tc->bsa_directory, path, data);
+}
+
+buffer_t *
+testcase_playback_efi_directory(testcase_t *tc, const char *partition, const char *directory)
+{
+	char path[PATH_MAX];
+
+	partition = get_basename(partition);
+
+	snprintf(path, sizeof(path), "%s/%s/.dir_list", partition, directory);
+	return testcase_read_file(tc->bsa_directory, path);
+}
+
+void
 testcase_record_partition_uuid(testcase_t *tc, const char *uuid, const char *dev_name)
 {
 	if (!strncmp(dev_name, "/dev/", 5))
