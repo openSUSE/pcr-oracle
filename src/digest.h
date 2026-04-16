@@ -82,5 +82,6 @@ extern void			parsed_cert_free(parsed_cert_t *);
 extern const char *		parsed_cert_subject(const parsed_cert_t *);
 extern const char *		parsed_cert_issuer(const parsed_cert_t *);
 extern bool			parsed_cert_issued_by(const parsed_cert_t *cert, const parsed_cert_t *potential_issuer);
+extern buffer_t *		parsed_cert_as_buffer(const parsed_cert_t *cert);
 
 #endif /* DIGEST_H */

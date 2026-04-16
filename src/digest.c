@@ -413,6 +413,14 @@ x509_as_buffer(X509 *x509)
 	return bp;
 }
 
+buffer_t *
+parsed_cert_as_buffer(const parsed_cert_t *cert)
+{
+	if (!cert || !cert->x)
+		return NULL;
+	return x509_as_buffer(cert->x);
+}
+
 parsed_cert_t *
 pkcs7_extract_signer(buffer_t *data)
 {
