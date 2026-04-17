@@ -84,6 +84,41 @@ __tpm_event_efi_bsa_describe(const tpm_parsed_event_t *parsed)
 	return result;
 }
 
+static bool
+__is_data_already_measured(measured_blob_t **head, const buffer_t *data)
+{
+	measured_blob_t *cur = *head;
+	unsigned int len;
+	const void *ptr;
+	measured_blob_t *node;
+
+	if (!data)
+		return false;
+
+	len = buffer_available(data);
+	ptr = buffer_read_pointer(data);
+
+	while (cur != NULL) {
+		if (buffer_available(cur->data) == len &&
+		    memcmp(buffer_read_pointer(cur->data), ptr, len) == 0) {
+			return true;
+		}
+		cur = cur->next;
+	}
+
+	node = calloc(1, sizeof(*node));
+	if (node == NULL) {
+		error("Failed to allocate memory for measured data link\n");
+		return false;
+	}
+	node->data = buffer_alloc_write(len);
+	buffer_put(node->data, ptr, len);
+	node->next = *head;
+	*head = node;
+
+	return false;
+}
+
 static char *
 __extract_efi_directory(const char *efi_application)
 {

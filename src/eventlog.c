@@ -1199,6 +1199,7 @@ void
 tpm_event_log_scan_ctx_destroy(tpm_event_log_scan_ctx_t *ctx)
 {
 	file_list_t *cur, *next;
+	measured_blob_t *mcur, *mnext;
 
 	drop_string(&ctx->efi_partition);
 	drop_string(&ctx->first_application);
@@ -1210,5 +1211,13 @@ tpm_event_log_scan_ctx_destroy(tpm_event_log_scan_ctx_t *ctx)
 		free(cur->filepath);
 		free(cur);
 		cur = next;
+	}
+
+	mcur = ctx->measured_blobs;
+	while (mcur != NULL) {
+		mnext = mcur->next;
+		buffer_free(mcur->data);
+		free(mcur);
+		mcur = mnext;
 	}
 }

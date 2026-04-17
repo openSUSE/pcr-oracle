@@ -200,6 +200,11 @@ typedef struct extra_files {
 	file_list_t *		cur;
 } extra_files_t;
 
+typedef struct measured_blob {
+	buffer_t *		data;
+	struct measured_blob *	next;
+} measured_blob_t;
+
 /*
  * This is used while scanning the event log.
  */
@@ -207,6 +212,7 @@ typedef struct tpm_event_log_scan_ctx {
 	char *			efi_partition;
 	char *			first_application;
 	extra_files_t 		shim_extra;
+	measured_blob_t *	measured_blobs;
 } tpm_event_log_scan_ctx_t;
 
 /*
