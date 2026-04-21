@@ -142,50 +142,89 @@ __shim_extra_files_init(const struct efi_bsa_event *evspec)
 	}
 	str_ptr = buffer_read_pointer(raw_list);
 
-	/* Shim loads and measures extra files in the exact order they appear in
-	 * the directory. We must preserve this file system order when building our
-	 * list to accurately predict the PCR sequence.
+	/* Pass 1: Shim explicitly searches for and measures revocations_sbat.efi
+	 * first. If found, it stops the search and rewinds the directory.
 	 */
-	while(sscanf(str_ptr, "%[^\n]\n%n", filename, &offset) == 1) {
+	do {
+		if (sscanf(str_ptr, "%[^\n]\n%n", filename, &offset) != 1)
+			break;
 		str_ptr += offset;
 
-		if (strcasecmp(filename, "revocations_sbat.efi") == 0 ||
-		    strcasecmp(filename, "revocations_sku.efi") == 0 ||
-		    (strncasecmp(filename, "shim_certificate", 16) == 0 &&
-		     path_has_file_extension(filename, ".efi"))) {
+		if (strcasecmp(filename, "revocations_sbat.efi") != 0)
+			continue;
 
-			node = calloc(1, sizeof(file_list_t));
-			if (node == NULL) {
-				error("Failed to allocate a file_list_t node\n");
-				goto out;
-			}
-
-			/* Construct the full file path */
-			ret = snprintf(filepath, sizeof(filepath), "%s/%s", efi_directory, filename);
-			if (ret >= sizeof(filepath)) {
-				error("File path too long: (%s/%s)\n", efi_directory, filename);
-				goto out;
-			}
-
-			node->filepath = strdup(filepath);
-			if (node->filepath == NULL) {
-				error("Failed to duplicate filepath(%s)\n", filepath);
-				goto out;
-			}
-
-			/* Append the filepath to the list */
-			if (head) {
-				tail->next = node;
-				tail = node;
-			} else {
-				head = node;
-				tail = node;
-			}
+		node = calloc(1, sizeof(file_list_t));
+		if (node == NULL) {
+			error("Failed to allocate a file_list_t node\n");
+			goto out;
 		}
 
-		if (*str_ptr == '\0')
+		/* Construct the full file path */
+		ret = snprintf(filepath, sizeof(filepath), "%s/%s", efi_directory, filename);
+		if (ret >= sizeof(filepath)) {
+			error("File path too long: (%s/%s)\n", efi_directory, filename);
+			free(node);
+			goto out;
+		}
+		node->filepath = strdup(filepath);
+		if (node->filepath == NULL) {
+			error("Failed to duplicate filepath(%s)\n", filepath);
+			free(node);
+			goto out;
+		}
+
+		/* revocations_sbat.efi is always the first node if exists */
+		head = node;
+		tail = node;
+		break;
+	} while (*str_ptr != '\0');
+
+	/* Pass 2: Shim iterates the directory again from the beginning, ignoring
+	 * the SBAT file, and measures certificates and SKU revocations in raw
+	 * FAT directory order.
+	 */
+	str_ptr = buffer_read_pointer(raw_list);
+	do {
+		if (sscanf(str_ptr, "%[^\n]\n%n", filename, &offset) != 1)
 			break;
-	}
+		str_ptr += offset;
+
+		if (strcasecmp(filename, "revocations_sku.efi") != 0 &&
+		    !(strncasecmp(filename, "shim_certificate", 16) == 0 &&
+		      path_has_file_extension(filename, ".efi"))) {
+			continue;
+		}
+
+		node = calloc(1, sizeof(file_list_t));
+		if (node == NULL) {
+			error("Failed to allocate a file_list_t node\n");
+			goto out;
+		}
+
+		/* Construct the full file path */
+		ret = snprintf(filepath, sizeof(filepath), "%s/%s", efi_directory, filename);
+		if (ret >= sizeof(filepath)) {
+			error("File path too long: (%s/%s)\n", efi_directory, filename);
+			free(node);
+			goto out;
+		}
+
+		node->filepath = strdup(filepath);
+		if (node->filepath == NULL) {
+			error("Failed to duplicate filepath(%s)\n", filepath);
+			free(node);
+			goto out;
+		}
+
+		/* Append the filepath to the list */
+		if (head) {
+			tail->next = node;
+			tail = node;
+		} else {
+			head = node;
+			tail = node;
+		}
+	} while (*str_ptr != '\0');
 
 out:
 	if (efi_directory)
