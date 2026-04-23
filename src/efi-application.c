@@ -119,6 +119,225 @@ __is_data_already_measured(measured_blob_t **head, const buffer_t *data)
 	return false;
 }
 
+static const tpm_evdigest_t *
+__synthetic_pcr7_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *parsed, tpm_event_log_rehash_ctx_t *ctx)
+{
+	return digest_compute(ctx->algo, parsed->efi_variable_event.data, parsed->efi_variable_event.len);
+}
+
+static const char *
+__synthetic_pcr7_describe(const tpm_parsed_event_t *parsed)
+{
+	return "Synthesized Shim Authority Event";
+}
+
+static void
+__synthetic_pcr7_destroy(tpm_parsed_event_t *parsed)
+{
+	free(parsed->efi_variable_event.data);
+}
+
+static const uint8_t uefi_db_guid[16] =
+	{0xcb, 0xb2, 0x19, 0xd7,
+	 0x3a, 0x3d,
+	 0x96, 0x45,
+	 0xa3, 0xbc,
+	 0xda, 0xd0, 0x0e, 0x67, 0x65, 0x6f};
+
+static const uint8_t shim_variable_guid[16] =
+	{0x50, 0xab, 0x5d, 0x60,
+	 0x46, 0xe0,
+	 0x00, 0x43,
+	 0xab, 0xb6,
+	 0x3d, 0xd8, 0x10, 0xdd, 0x8b, 0x23};
+
+typedef struct {
+	const char *search_name;
+	const char *var_name;
+	const uint8_t *var_guid;
+} db_search_t;
+
+static buffer_t *
+build_shim_authority_payload(const parsed_cert_t *signer)
+{
+	buffer_t *var_data = NULL;
+	const char *var_name = NULL;
+	const uint8_t *var_guid = NULL;
+	uint64_t name_len = 0;
+	buffer_t *bp = NULL;
+	uint64_t i;
+
+	const db_search_t databases[] = {
+		{ "db", "db", uefi_db_guid },
+		{ "MokList", "MokList", shim_variable_guid },
+		{ "shim-vendor-cert", "Shim", shim_variable_guid }
+	};
+
+	for (i = 0; i < sizeof(databases) / sizeof(databases[0]); i++) {
+		var_data = efi_application_locate_authority_record(databases[i].search_name,
+								   signer);
+		if (var_data) {
+			var_name = databases[i].var_name;
+			name_len = strlen(var_name);
+			var_guid = databases[i].var_guid;
+			break;
+		}
+	}
+
+	if (!var_data) {
+		error("Failed to locate authority record for synthetic event\n");
+		return NULL;
+	}
+
+	uint64_t data_len = buffer_available(var_data);
+	bp = buffer_alloc_write(16 + 8 + 8 + name_len * 2 + data_len);
+
+	buffer_put(bp, var_guid, 16);
+	buffer_put_u64le(bp, name_len);
+	buffer_put_u64le(bp, data_len);
+	for (i = 0; i < name_len; i++)
+		buffer_put_u16le(bp, var_name[i]);
+	buffer_copy(var_data, data_len, bp);
+	buffer_free(var_data);
+
+	return bp;
+}
+
+static tpm_event_t *
+synthesize_shim_authority_event(tpm_event_t *inject_after, const parsed_cert_t *signer)
+{
+	tpm_event_t *syn_7;
+	buffer_t *payload = NULL;
+
+	syn_7 = calloc(1, sizeof(*syn_7));
+	if (syn_7 == NULL) {
+		error("Failed to allocate memory for shim Authority event\n");
+		goto err;
+	}
+
+	payload = build_shim_authority_payload(signer);
+	if (!payload) {
+		error("Failed to build shim Authority event payload\n");
+		goto err;
+	}
+
+	syn_7->synthetic = true;
+	syn_7->event_type = TPM2_EFI_VARIABLE_AUTHORITY;
+	syn_7->pcr_index = 7;
+	syn_7->rehash_strategy = EVENT_STRATEGY_PARSE_REHASH;
+
+	syn_7->event_size = buffer_available(payload);
+	syn_7->event_data = malloc(syn_7->event_size);
+	if (syn_7->event_data == NULL) {
+		error("Failed to allocate memory for shim Authority event data\n");
+		goto err;
+	}
+	memcpy(syn_7->event_data, buffer_read_pointer(payload), syn_7->event_size);
+
+	syn_7->__parsed = calloc(1, sizeof(tpm_parsed_event_t));
+	if (syn_7->__parsed == NULL) {
+		error("Failed to allocate memory for parsed shim Authority event\n");
+		goto err;
+	}
+	syn_7->__parsed->describe = __synthetic_pcr7_describe;
+	syn_7->__parsed->rehash = __synthetic_pcr7_rehash;
+	syn_7->__parsed->destroy = __synthetic_pcr7_destroy;
+	syn_7->__parsed->efi_variable_event.len = buffer_available(payload);
+	syn_7->__parsed->efi_variable_event.data = malloc(buffer_available(payload));
+	if (syn_7->__parsed->efi_variable_event.data == NULL) {
+		error("Failed to allocate memory for efi variable event data\n");
+		goto err;
+	}
+	memcpy(syn_7->__parsed->efi_variable_event.data,
+	       buffer_read_pointer(payload),
+	       buffer_available(payload));
+	buffer_free(payload);
+
+	syn_7->next = inject_after->next;
+	syn_7->prev = inject_after;
+	if (inject_after->next)
+		inject_after->next->prev = syn_7;
+	inject_after->next = syn_7;
+	return syn_7;
+
+err:
+	buffer_free(payload);
+
+	if (syn_7 != NULL) {
+		if (syn_7->__parsed != NULL) {
+			free(syn_7->__parsed->efi_variable_event.data);
+			free(syn_7->__parsed);
+		}
+		free(syn_7->event_data);
+		free(syn_7);
+	}
+
+	return inject_after;
+}
+
+static tpm_event_t *
+synthesize_shim_bsa_event(tpm_event_t *inject_after, const char *filepath, tpm_event_log_scan_ctx_t *ctx)
+{
+	tpm_event_t *syn_4 = calloc(1, sizeof(*syn_4));
+
+	if (syn_4 == NULL) {
+		error("Failed to allocate memory for shim BSA event\n");
+		goto err;
+	}
+
+	syn_4->synthetic = true;
+	syn_4->event_type = TPM2_EFI_BOOT_SERVICES_APPLICATION;
+	syn_4->pcr_index = 4;
+	syn_4->rehash_strategy = EVENT_STRATEGY_PARSE_REHASH;
+	if (ctx->shim_event_data_template) {
+		syn_4->event_size = ctx->shim_event_data_size;
+		syn_4->event_data = malloc(syn_4->event_size);
+		if (syn_4->event_data == NULL) {
+			error("Failed to allocate memory for shim BSA event data\n");
+			goto err;
+		}
+		memcpy(syn_4->event_data, ctx->shim_event_data_template, syn_4->event_size);
+	}
+	syn_4->__parsed = calloc(1, sizeof(tpm_parsed_event_t));
+	if (syn_4->__parsed == NULL) {
+		error("Failed to allocate memory for parsed shim BSA event\n");
+		goto err;
+	}
+	syn_4->__parsed->describe = __tpm_event_efi_bsa_describe;
+	syn_4->__parsed->rehash = __tpm_event_efi_bsa_rehash;
+	syn_4->__parsed->destroy = __tpm_event_efi_bsa_destroy;
+	syn_4->__parsed->efi_bsa_event.efi_partition = strdup(ctx->efi_partition);
+	if (syn_4->__parsed->efi_bsa_event.efi_partition == NULL) {
+		error("Failed to duplicate efi_partition for shim BSA event\n");
+		goto err;
+	}
+	syn_4->__parsed->efi_bsa_event.efi_application = strdup(filepath);
+	if (syn_4->__parsed->efi_bsa_event.efi_application == NULL) {
+		error("Failed to duplicate efi_application for shim BSA event\n");
+		goto err;
+	}
+	__tpm_event_efi_bsa_inspect_image(&syn_4->__parsed->efi_bsa_event);
+
+	syn_4->next = inject_after->next;
+	syn_4->prev = inject_after;
+	if (inject_after->next)
+		inject_after->next->prev = syn_4;
+	inject_after->next = syn_4;
+	return syn_4;
+
+err:
+	if (syn_4 != NULL) {
+		if (syn_4->__parsed != NULL) {
+			free(syn_4->__parsed->efi_bsa_event.efi_partition);
+			free(syn_4->__parsed);
+		}
+		free(syn_4->event_data);
+		free(syn_4);
+	}
+
+	return inject_after;
+}
+
 static char *
 __extract_efi_directory(const char *efi_application)
 {
@@ -271,6 +490,151 @@ out:
 	return head;
 }
 
+static tpm_event_t *
+get_previous_authority_event(tpm_event_t *ev)
+{
+	tpm_event_t *prev = ev->prev;
+
+	while (prev) {
+		if (prev->event_type == TPM2_EFI_VARIABLE_AUTHORITY)
+			return prev;
+
+		/* Stop searching if we hit another application or driver load */
+		if (prev->event_type == TPM2_EFI_BOOT_SERVICES_APPLICATION ||
+		    prev->event_type == TPM2_EFI_BOOT_SERVICES_DRIVER)
+			break;
+
+		prev = prev->prev;
+	}
+	return NULL;
+}
+
+static bool
+synthesize_shim_extra_events(tpm_event_t *ev, struct efi_bsa_event *evspec, tpm_event_log_scan_ctx_t *ctx)
+{
+	file_list_t *list, *cur;
+	tpm_event_t *inject_after = ev;
+	tpm_event_t *auth_ev;
+
+	auth_ev = get_previous_authority_event(ev);
+
+	/* Retroactively skip the corresponding PCR 7 event */
+	if (auth_ev)
+		auth_ev->rehash_strategy = EVENT_STRATEGY_NO_ACTION;
+
+	/* Save the original event data payload as a template for synthetic events */
+	if (!ctx->shim_event_data_template && ev->event_data && ev->event_size > 0) {
+		ctx->shim_event_data_template = malloc(ev->event_size);
+		if (ctx->shim_event_data_template == NULL) {
+			error("Failed to allocate memory for shim event template\n");
+			return false;
+		}
+
+		memcpy(ctx->shim_event_data_template, ev->event_data, ev->event_size);
+		ctx->shim_event_data_size = ev->event_size;
+	}
+
+	if (ctx->skip_original_shim_events)
+		goto out;
+
+	list = __shim_extra_files_init(evspec);
+	if (list == NULL) {
+		error("Failed to get shim extra file list\n");
+		return false;
+	}
+
+	ctx->shim_extra.head = list;
+	cur = list;
+
+	while (cur != NULL) {
+		buffer_t *img_data;
+		pecoff_image_info_t *img_info;
+		parsed_cert_t *signer;
+		buffer_t *cert_der;
+
+		img_data = runtime_read_efi_application(ctx->efi_partition, cur->filepath);
+		if (!img_data) {
+			cur = cur->next;
+			continue;
+		}
+
+		img_info = pecoff_inspect(img_data, cur->filepath);
+		if (!img_info) {
+			buffer_free(img_data);
+			cur = cur->next;
+			continue;
+		}
+
+		signer = authenticode_get_signer(img_info);
+		if (signer) {
+			cert_der = parsed_cert_as_buffer(signer);
+			if (!__is_data_already_measured(&ctx->measured_blobs, cert_der)) {
+				inject_after = synthesize_shim_authority_event(inject_after, signer);
+				debug("Synthesized PCR 7 event for signer of %s\n",
+				      cur->filepath);
+			}
+			buffer_free(cert_der);
+			parsed_cert_free(signer);
+		}
+
+		inject_after = synthesize_shim_bsa_event(inject_after, cur->filepath, ctx);
+		debug("Synthesized PCR 4 event for %s\n", cur->filepath);
+
+		pecoff_image_info_free(img_info);
+		cur = cur->next;
+	}
+
+	/* All shim extra file events are synthesized. Skip the original events
+	 * from shim. */
+	ctx->skip_original_shim_events = true;
+
+out:
+	/* Mark the original PCR 4 event as NO ACTION to skip it */
+	ev->rehash_strategy = EVENT_STRATEGY_NO_ACTION;
+	return true;
+}
+
+static bool
+deduplicate_main_authority_event(tpm_event_t *ev, struct efi_bsa_event *evspec, tpm_event_log_scan_ctx_t *ctx)
+{
+	parsed_cert_t *signer;
+	buffer_t *cert_der;
+	tpm_event_t *auth_ev;
+
+	/* Skip deduplication if it is not necessary */
+	if (!evspec->img_info || !secure_boot_enabled())
+		return true;
+
+	/* Skip deduplication if there is no signer */
+	signer = authenticode_get_signer(evspec->img_info);
+	if (signer == NULL)
+		return true;
+
+	cert_der = parsed_cert_as_buffer(signer);
+	if (cert_der == NULL) {
+		error("Failed to fetch signer buffer\n");
+		return false;
+	}
+
+	/* Fetch the corresponding authority event for this application */
+	auth_ev = get_previous_authority_event(ev);
+
+	if (!__is_data_already_measured(&ctx->measured_blobs, cert_der)) {
+		/* Not measured yet. If we don't have the PCR 7 event, synthesize one. */
+		if (auth_ev == NULL && ev->prev != NULL)
+			synthesize_shim_authority_event(ev->prev, signer);
+	} else {
+		/* Already measured. If we have a PCR 7 event for this signer,
+		 * neutralize it. */
+		if (auth_ev)
+			auth_ev->rehash_strategy = EVENT_STRATEGY_NO_ACTION;
+	}
+	buffer_free(cert_der);
+	parsed_cert_free(signer);
+
+	return true;
+}
+
 bool
 __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp, tpm_event_log_scan_ctx_t *ctx)
 {
@@ -315,46 +679,23 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 		assign_string(&evspec->efi_partition, ctx->efi_partition);
 
 	/* TPM events for shim extra files do not record the actual file paths
-	 * in their device path payload. We have to scan the directory of the
-	 * shim image to locate the actual extra files.
+	 * in their device path payload. We synthesize the PCR 4 and PCR 7
+	 * events directly from the directory contents to accurately predict
+	 * changes in signer or file count across updates.
 	 */
-	if (__is_shim_extra_file(ev, evspec, ctx, is_fullpath)) {
-		/* Get the shim extra file list on demand */
-		if (ctx->shim_extra.head == NULL) {
-			file_list_t *list;
+	if (__is_shim_extra_file(ev, evspec, ctx, is_fullpath))
+		return synthesize_shim_extra_events(ev, evspec, ctx);
 
-			list = __shim_extra_files_init(evspec);
-			if (list == NULL) {
-				error("Failed to get shim extra file list\n");
-				return false;
-			}
+	if (!evspec->efi_application)
+		return true;
 
-			ctx->shim_extra.head = list;
-			ctx->shim_extra.cur = list;
-		}
+	if (is_fullpath == true && ctx->first_application == NULL)
+		assign_string(&ctx->first_application, evspec->efi_application);
 
-		/* Replace evspec->efi_application with the most likely file path
-		 * for the extra file.
-		 */
-		if (ctx->shim_extra.cur != NULL) {
-			drop_string(&evspec->efi_application);
-			assign_string(&evspec->efi_application, ctx->shim_extra.cur->filepath);
-			ctx->shim_extra.cur = ctx->shim_extra.cur->next;
-			debug("Update efi_application: %s\n", evspec->efi_application);
-		} else {
-			error("Failed to locate shim extra file\n");
-			return false;
-		}
-	}
+	__tpm_event_efi_bsa_inspect_image(evspec);
 
-	if (evspec->efi_application) {
-		if (is_fullpath == true && ctx->first_application == NULL)
-			assign_string(&ctx->first_application, evspec->efi_application);
-
-		__tpm_event_efi_bsa_inspect_image(evspec);
-	}
-
-	return true;
+	/* Deduplicate PCR 7 Authority event for the main bootloader, e.g. grub2 */
+	return deduplicate_main_authority_event(ev, evspec, ctx);
 }
 
 bool
