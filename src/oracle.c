@@ -77,6 +77,7 @@ struct predictor {
 	tpm_pcr_bank_t		prediction;
 	bool			pre_scanned;
 	tpm_event_t *		stop_event_ptr;
+	bool			disable_synthesis;
 };
 
 #define GRUB_PCR_SNAPSHOT_PATH	"/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
@@ -107,6 +108,7 @@ enum {
 	OPT_BOOT_ENTRY,
 	OPT_COMPARE_CURRENT,
 	OPT_PERSISTENT_SRK,
+	OPT_DISABLE_SYNTHESIS,
 };
 
 static struct option options[] = {
@@ -143,6 +145,7 @@ static struct option options[] = {
 	{ "next-kernel",	required_argument,	0,	OPT_BOOT_ENTRY },
 	{ "compare-current",	no_argument,		0,	OPT_COMPARE_CURRENT },
 	{ "persistent-srk",	required_argument,	0,	OPT_PERSISTENT_SRK },
+	{ "disable-synthesis",	no_argument,		0,	OPT_DISABLE_SYNTHESIS },
 
 	{ NULL }
 };
@@ -186,6 +189,8 @@ usage(int exitval, const char *msg)
 		"  --verify SOURCE        After applying all updates, compare the prediction against the given SOURCE (see below).\n"
 		"  --tpm-eventlog PATH\n"
 		"                         Specify a different TPM event log to process.\n"
+		"  --disable-synthesis\n"
+		"                         Disable predictive event synthesis and deduplication for shim extra files.\n"
 		"\n"
 		"The pcr-index argument can be one or more PCR indices or index ranges, separated by comma.\n"
 		"Using \"all\" selects all applicable PCR registers.\n"
@@ -671,6 +676,7 @@ predictor_pre_scan_eventlog(struct predictor *pred, tpm_event_t **stop_event_p)
 	*stop_event_p = NULL;
 
 	tpm_event_log_scan_ctx_init(&scan_ctx);
+	scan_ctx.disable_synthesis = pred->disable_synthesis;
 	for (ev = pred->event_log; ev; ev = ev->next) {
 
 		if (ev->synthetic)
@@ -1200,6 +1206,7 @@ main(int argc, char **argv)
 	char *opt_boot_entry = NULL;
 	bool opt_compare_current = false;
 	char *opt_persistent_srk = NULL;
+	bool opt_disable_synthesis = false;
 	const target_platform_t *target;
 	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
@@ -1308,6 +1315,9 @@ main(int argc, char **argv)
 			break;
 		case OPT_PERSISTENT_SRK:
 			opt_persistent_srk = optarg;
+			break;
+		case OPT_DISABLE_SYNTHESIS:
+			opt_disable_synthesis = true;
 			break;
 		case 'h':
 			usage(0, NULL);
@@ -1495,6 +1505,7 @@ main(int argc, char **argv)
 
 	pred = predictor_new(pcr_selection, opt_from, opt_eventlog_path,
 			opt_output_format, opt_boot_entry);
+	pred->disable_synthesis = opt_disable_synthesis;
 
 	if (opt_stop_event)
 		predictor_set_stop_event(pred, opt_stop_event, !opt_stop_before);
