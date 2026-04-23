@@ -1220,4 +1220,7 @@ tpm_event_log_scan_ctx_destroy(tpm_event_log_scan_ctx_t *ctx)
 		free(mcur);
 		mcur = mnext;
 	}
+
+	if (ctx->shim_event_data_template)
+		free(ctx->shim_event_data_template);
 }

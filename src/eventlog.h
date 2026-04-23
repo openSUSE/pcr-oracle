@@ -46,6 +46,7 @@ typedef struct tpm_event {
 	int			rehash_strategy;
 
 	tpm_evdigest_t		predicted_digest;
+	bool			synthetic;
 } tpm_event_t;
 
 typedef void			tpm_event_bit_printer(const char *, ...);
@@ -214,6 +215,9 @@ typedef struct tpm_event_log_scan_ctx {
 	char *			first_application;
 	extra_files_t 		shim_extra;
 	measured_blob_t *	measured_blobs;
+	bool			skip_original_shim_events;
+	void *			shim_event_data_template;
+	unsigned int		shim_event_data_size;
 } tpm_event_log_scan_ctx_t;
 
 /*

@@ -665,6 +665,10 @@ predictor_pre_scan_eventlog(struct predictor *pred, tpm_event_t **stop_event_p)
 
 	tpm_event_log_scan_ctx_init(&scan_ctx);
 	for (ev = pred->event_log; ev; ev = ev->next) {
+
+		if (ev->synthetic)
+			continue;
+
 		ev->rehash_strategy = predictor_get_event_strategy(ev->event_type);
 		/* debug("%s -> %d\n", tpm_event_type_to_string(ev->event_type), ev->rehash_strategy); */
 
@@ -735,7 +739,7 @@ predictor_update_eventlog(struct predictor *pred)
 			debug("\n");
 			__tpm_event_print(ev, debug);
 
-			if (!(old_digest = tpm_event_get_digest(ev, pred->algo_info)))
+			if (!ev->synthetic && !(old_digest = tpm_event_get_digest(ev, pred->algo_info)))
 				fatal("Event log lacks a hash for digest algorithm %s\n", pred->algo);
 
 			if (false) {
@@ -787,6 +791,7 @@ predictor_update_eventlog(struct predictor *pred)
 				break;
 
 			case EVENT_STRATEGY_NO_ACTION:
+				debug("Skipping event (EVENT_STRATEGY_NO_ACTION)\n");
 				goto no_action;
 
 			default:
@@ -803,14 +808,19 @@ predictor_update_eventlog(struct predictor *pred)
 				okay = false;
 			}
 
-			if (opt_debug && new_digest != old_digest) {
-				if (new_digest->size == old_digest->size
-				 && !memcmp(new_digest->data, old_digest->data, old_digest->size)) {
-					debug("Digest for %s did not change\n", description);
-				} else {
-					debug("Digest for %s changed\n", description);
-					debug("  Old digest: %s\n", digest_print(old_digest));
+			if (opt_debug) {
+				if (ev->synthetic) {
+					debug("New synthetic event for %s\n", description);
 					debug("  New digest: %s\n", digest_print(new_digest));
+				} else if (new_digest != old_digest) {
+					if (new_digest->size == old_digest->size
+					 && !memcmp(new_digest->data, old_digest->data, old_digest->size)) {
+						debug("Digest for %s did not change\n", description);
+					} else {
+						debug("Digest for %s changed\n", description);
+						debug("  Old digest: %s\n", digest_print(old_digest));
+						debug("  New digest: %s\n", digest_print(new_digest));
+					}
 				}
 			}
 
