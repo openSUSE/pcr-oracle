@@ -510,6 +510,33 @@ get_previous_authority_event(tpm_event_t *ev)
 }
 
 static bool
+map_file_to_shim_event(struct efi_bsa_event *evspec, tpm_event_log_scan_ctx_t *ctx)
+{
+	/* Build the shim extra file list for later use */
+	if (ctx->shim_extra.head == NULL) {
+		file_list_t *list = __shim_extra_files_init(evspec);
+		if (list == NULL) {
+			error("Failed to get shim extra file list\n");
+			return false;
+		}
+		ctx->shim_extra.head = list;
+		ctx->shim_extra.cur = list;
+	}
+
+	if (ctx->shim_extra.cur == NULL) {
+		error("Failed to locate shim extra file\n");
+		return false;
+	}
+
+	drop_string(&evspec->efi_application);
+	assign_string(&evspec->efi_application, ctx->shim_extra.cur->filepath);
+	debug("Update efi_application: %s\n", evspec->efi_application);
+	ctx->shim_extra.cur = ctx->shim_extra.cur->next;
+
+	return true;
+}
+
+static bool
 synthesize_shim_extra_events(tpm_event_t *ev, struct efi_bsa_event *evspec, tpm_event_log_scan_ctx_t *ctx)
 {
 	file_list_t *list, *cur;
@@ -602,7 +629,7 @@ deduplicate_main_authority_event(tpm_event_t *ev, struct efi_bsa_event *evspec, 
 	tpm_event_t *auth_ev;
 
 	/* Skip deduplication if it is not necessary */
-	if (!evspec->img_info || !secure_boot_enabled())
+	if (ctx->disable_synthesis || !evspec->img_info || !secure_boot_enabled())
 		return true;
 
 	/* Skip deduplication if there is no signer */
@@ -683,8 +710,15 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 	 * events directly from the directory contents to accurately predict
 	 * changes in signer or file count across updates.
 	 */
-	if (__is_shim_extra_file(ev, evspec, ctx, is_fullpath))
-		return synthesize_shim_extra_events(ev, evspec, ctx);
+	if (__is_shim_extra_file(ev, evspec, ctx, is_fullpath)) {
+		if (!ctx->disable_synthesis)
+			return synthesize_shim_extra_events(ev, evspec, ctx);
+
+		/* The event synthesis is disabled. Try to find the real file name
+		 * for this shim extra file event. */
+		if (!map_file_to_shim_event(evspec, ctx))
+			return false;
+	}
 
 	if (!evspec->efi_application)
 		return true;

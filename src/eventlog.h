@@ -218,6 +218,7 @@ typedef struct tpm_event_log_scan_ctx {
 	bool			skip_original_shim_events;
 	void *			shim_event_data_template;
 	unsigned int		shim_event_data_size;
+	bool			disable_synthesis;
 } tpm_event_log_scan_ctx_t;
 
 /*
