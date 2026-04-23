@@ -75,6 +75,8 @@ struct predictor {
 	void			(*report_fn)(struct predictor *, unsigned int);
 
 	tpm_pcr_bank_t		prediction;
+	bool			pre_scanned;
+	tpm_event_t *		stop_event_ptr;
 };
 
 #define GRUB_PCR_SNAPSHOT_PATH	"/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
@@ -661,6 +663,11 @@ predictor_pre_scan_eventlog(struct predictor *pred, tpm_event_t **stop_event_p)
 	tpm_event_log_scan_ctx_t scan_ctx;
 	tpm_event_t *ev;
 
+	if (pred->pre_scanned) {
+		*stop_event_p = pred->stop_event_ptr;
+		return;
+	}
+
 	*stop_event_p = NULL;
 
 	tpm_event_log_scan_ctx_init(&scan_ctx);
@@ -693,6 +700,9 @@ predictor_pre_scan_eventlog(struct predictor *pred, tpm_event_t **stop_event_p)
 		}
 	}
 	tpm_event_log_scan_ctx_destroy(&scan_ctx);
+
+	pred->pre_scanned = true;
+	pred->stop_event_ptr = *stop_event_p;
 }
 
 static bool
@@ -963,6 +973,9 @@ compare_events(struct predictor *pred, struct predictor *pred_cmp,
 			debug("Stopped processing event log before indicated event\n");
 			break;
 		}
+
+		if (ev->rehash_strategy == EVENT_STRATEGY_NO_ACTION)
+			continue;
 
 		if (ev->pcr_index == pcr_index) {
 			/* Advance the event in the comparison event log */
