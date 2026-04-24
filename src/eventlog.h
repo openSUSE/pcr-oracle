@@ -25,6 +25,7 @@
 #include "types.h"
 
 typedef struct tpm_event {
+	struct tpm_event *	prev;
 	struct tpm_event *	next;
 
 	unsigned int		event_index;

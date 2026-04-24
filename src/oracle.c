@@ -231,7 +231,7 @@ static void
 predictor_load_eventlog(struct predictor *pred)
 {
 	tpm_event_log_reader_t *log;
-	tpm_event_t *ev, **tail;
+	tpm_event_t *ev, *prev = NULL, **tail;
 	uint8_t pcr0_locality;
 
 	log = event_log_open(pred->tpm_event_log_path);
@@ -241,6 +241,8 @@ predictor_load_eventlog(struct predictor *pred)
 	tail = &pred->event_log;
 	while ((ev = event_log_read_next(log)) != NULL) {
 		*tail = ev;
+		ev->prev = prev;
+		prev = ev;
 		tail = &ev->next;
 	}
 
