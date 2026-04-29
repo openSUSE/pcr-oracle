@@ -655,7 +655,7 @@ testcase_playback_prep_partition(testcase_t *tc)
 	if (count < 0)
 		fatal("failed to read prep_partition: %m\n");
 
-	buf[count+1] = '\0';
+	buf[count] = '\0';
 
 	close(fd);
 
