@@ -60,6 +60,7 @@ tpm_rsa_key_free(tpm_rsa_key_t *key)
 		EVP_PKEY_free(key->pkey);
 		key->pkey = NULL;
 	}
+	free(key);
 }
 
 /*
@@ -311,17 +312,24 @@ failed:
 TPM2B_PUBLIC *
 tpm_rsa_key_to_tss2(const tpm_rsa_key_t *key)
 {
+	TPM2B_PUBLIC *rsa_pub = NULL;
 	BIGNUM *n = NULL, *e = NULL;
 
 	if (!EVP_PKEY_get_bn_param(key->pkey, OSSL_PKEY_PARAM_RSA_N, &n)) {
 		error("%s: cannot extract RSA modulus\n", key->path);
-		return NULL;
+		goto err;
 	}
 	if (!EVP_PKEY_get_bn_param(key->pkey, OSSL_PKEY_PARAM_RSA_E, &e)) {
 		error("%s: cannot extract RSA exponent\n", key->path);
-		return NULL;
+		goto err;
 	}
-	return rsa_pubkey_alloc(n, e, key->path);
+	rsa_pub = rsa_pubkey_alloc(n, e, key->path);
+
+err:
+	BN_free(n);
+	BN_free(e);
+
+	return rsa_pub;
 }
 
 const tpm_evdigest_t *
