@@ -968,7 +968,7 @@ __efi_signature_list_parse(buffer_t *db_data, unsigned int list_num, efi_signatu
 
 	memset(result, 0, sizeof(*result));
 
-	debug2("Parsing list %u:\n");
+	debug2("Parsing list %u:\n", list_num);
 	hexdump(buffer_read_pointer(db_data), 28, debug2, 8);
 
 	if (!buffer_get(db_data, result->type, sizeof(result->type))
@@ -1106,7 +1106,7 @@ efi_application_locate_authority_record(const char *db_name, const parsed_cert_t
 			continue;
 		}
 
-		debug2(" %u inspecting X.509 signature list\n", list_num, tpm_event_decode_uuid(sig_list.type));
+		debug2(" %u inspecting X.509 signature list\n", list_num);
 		for (i = 0; i < sig_list.num_signatures; ++i) {
 			efi_signature_data_t *sig_data = &sig_list.signatures[i];
 			parsed_cert_t *authority;
