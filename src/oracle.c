@@ -337,6 +337,9 @@ predictor_set_stop_event(struct predictor *pred, const char *event_desc, bool af
 	char *copy, *name, *value;
 
 	copy = strdup(event_desc);
+	if (copy == NULL)
+		fatal("Failed to copy event\n");
+
 	if (!__stop_event_parse(copy, &name, &value))
 		fatal("Cannot parse stop event \"%s\"\n", event_desc);
 
@@ -350,6 +353,8 @@ predictor_set_stop_event(struct predictor *pred, const char *event_desc, bool af
 	}
 
 	pred->stop_event.value = strdup(value);
+	if (pred->stop_event.value == NULL)
+		fatal("Failed to duplicate stop event\n");
 	pred->stop_event.after = after;
 	free(copy);
 }
