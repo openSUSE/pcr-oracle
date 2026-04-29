@@ -184,10 +184,13 @@ static char *
 testcase_read_symlink(const char *directory, const char *name, const char *default_dir)
 {
 	char path[PATH_MAX], target[PATH_MAX], result[PATH_MAX];
+	ssize_t target_sz;
 
 	snprintf(path, sizeof(path), "%s/%s", directory, name);
-	if (readlink(path, target, sizeof(target)) < 0)
+	target_sz = readlink(path, target, sizeof(target) - 1);
+	if (target_sz < 0)
 		fatal("Cannot read symlink %s: %m\n", path);
+	target[target_sz] = '\0';
 
 	if (target[0] != '/' && default_dir) {
 		if (snprintf(result, sizeof(result), "%s/%s", default_dir, target) < 0)
