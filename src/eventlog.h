@@ -229,7 +229,6 @@ typedef struct tpm_event_log_scan_ctx {
  */
 typedef struct tpm_event_log_rehash_ctx {
 	const tpm_algo_info_t *	algo;
-	bool			use_pesign;		/* compute authenticode FP using external pesign application */
 
 	const pecoff_image_info_t *next_stage_img;
 

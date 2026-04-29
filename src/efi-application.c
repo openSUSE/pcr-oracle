@@ -794,51 +794,6 @@ __tpm_event_efi_bsa_inspect_image(struct efi_bsa_event *evspec)
 }
 
 static const tpm_evdigest_t *
-__pecoff_rehash_old(tpm_event_log_rehash_ctx_t *ctx, const char *filename)
-{
-	const char *algo_name = ctx->algo->openssl_name;
-	char cmdbuf[8192], linebuf[1024];
-	const tpm_evdigest_t *md = NULL;
-	FILE *fp;
-	int exitcode;
-
-	snprintf(cmdbuf, sizeof(cmdbuf),
-			"pesign --hash --in %s --digest_type %s",
-			filename, algo_name);
-
-	debug("Executing command: %s\n", cmdbuf);
-	if ((fp = popen(cmdbuf, "r")) == NULL)
-		fatal("Unable to run command: %s\n", cmdbuf);
-
-	while (fgets(linebuf, sizeof(linebuf), fp) != NULL) {
-		char *w;
-
-		/* line must start with "hash:" */
-		if (!(w = strtok(linebuf, " \t\n:")) || strcmp(w, "hash"))
-			continue;
-
-		if (!(w = strtok(NULL, " \t\n")))
-			fatal("cannot parse pesign output\n");
-
-		if (!(md = parse_digest(w, algo_name)))
-			fatal("unable to parse %s digest printed by pesign: \"%s\"\n", algo_name, w);
-
-		debug("  pesign digest: %s\n", digest_print(md));
-		break;
-	}
-
-	exitcode = pclose(fp);
-	if (exitcode == -1)
-		fatal("pclose failed: %m\n");
-	else if (!WIFEXITED(exitcode))
-		fatal("pesign command failed\n");
-	else if (WEXITSTATUS(exitcode) != 0)
-		fatal("pesign command failed with %d\n", WEXITSTATUS(exitcode));
-
-	return md;
-}
-
-static const tpm_evdigest_t *
 __efi_application_rehash_direct(const struct efi_bsa_event *evspec, tpm_event_log_rehash_ctx_t *ctx)
 {
 	const tpm_evdigest_t *md;
@@ -853,24 +808,6 @@ __efi_application_rehash_direct(const struct efi_bsa_event *evspec, tpm_event_lo
 	md = authenticode_get_digest(evspec->img_info, digest);
 
 	digest_ctx_free(digest);
-
-	return md;
-}
-
-static const tpm_evdigest_t *
-__efi_application_rehash_pesign(tpm_event_log_rehash_ctx_t *ctx, const char *device_path, const char *file_path)
-{
-	const tpm_evdigest_t *md;
-	file_locator_t *loc;
-	const char *fullpath;
-
-	loc = runtime_locate_file(device_path, file_path);
-	if (!loc)
-		fatal("Failed to locate EFI application (%s)%s", device_path, file_path);
-
-	fullpath = file_locator_get_full_path(loc);
-	md = __pecoff_rehash_old(ctx, fullpath);
-	file_locator_free(loc);
 
 	return md;
 }
@@ -981,9 +918,6 @@ __tpm_event_efi_bsa_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *pars
 		 || !buffer_copy(sbatlevel, sbatlevel->size, ctx->sbatlevel))
 			return NULL;
 	}
-
-	if (ctx->use_pesign)
-		return __efi_application_rehash_pesign(ctx, evspec->efi_partition, evspec->efi_application);
 
 	return __efi_application_rehash_direct(evspec, ctx);
 }
