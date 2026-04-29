@@ -47,7 +47,7 @@ platform_read_shim_vendor_cert(void)
 	 */
 	snprintf(path, sizeof(path), "%s/%s/shim.efi", PLATFORM_EFI_INSTALLDIR, uts.machine);
 	if (realpath(path, rpath) == NULL) {
-		error("%s: %\n", path);
+		error("realpath on %s: %m\n", path);
 		return NULL;
 	}
 
