@@ -284,7 +284,7 @@ runtime_read_efi_application(const char *partition, const char *application)
 {
         file_locator_t *loc;
 	const char *fullpath;
-	buffer_t *result;
+	buffer_t *result = NULL;
 
 	if (testcase_playback)
 		return testcase_playback_efi_application(testcase_playback, partition, application);
