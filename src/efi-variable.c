@@ -534,11 +534,16 @@ __tpm_event_parse_efi_variable(tpm_event_t *ev, tpm_parsed_event_t *parsed, buff
 		return false;
 
 	parsed->efi_variable_event.data = malloc(data_len);
+	if (parsed->efi_variable_event.data == NULL) {
+		error("Failed to allocate memory for EFI variable event data\n");
+		return false;
+	}
+
 	if (!buffer_get(bp, parsed->efi_variable_event.data, data_len))
 		return false;
 	parsed->efi_variable_event.len = data_len;
 
-	return parsed;
+	return true;
 }
 
 const char *
