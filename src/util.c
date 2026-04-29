@@ -414,7 +414,7 @@ parse_version(const char *string, parsed_version_t *ver)
 		if (*s || n == ULONG_MAX)
 			goto failed;
 
-		if (ver->count > 16)
+		if (ver->count >= 16)
 			goto failed;
 		ver->numbers[ver->count++] = n;
 
