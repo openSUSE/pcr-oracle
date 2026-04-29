@@ -155,6 +155,8 @@ file_locator_free(file_locator_t *loc)
 	drop_string(&loc->partition);
 	drop_string(&loc->relative_path);
 	drop_string(&loc->full_path);
+
+	free(loc);
 }
 
 const char *
