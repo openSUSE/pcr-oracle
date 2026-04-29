@@ -215,7 +215,7 @@ tpm2key_read_file(const char *path, TSSPRIVKEY **tpm2key)
 	}
 
 	if (strcmp(OID_sealedData, oid) != 0) {
-		error("%s is not a sealed key in TPM 2.0 Key Format\n");
+		error("%s is not a sealed key in TPM 2.0 Key Format\n", path);
 		goto error;
 	}
 
