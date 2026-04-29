@@ -100,17 +100,24 @@ runtime_locate_file(const char *device_path, const char *file_path)
 	char *dirname;
 
 	loc = calloc(1, sizeof(*loc));
+	if (loc == NULL) {
+		error("Failed to allocate memory for file locator\n");
+		return NULL;
+	}
+
 	assign_string(&loc->partition, device_path);
 	assign_string(&loc->relative_path, file_path);
 
 	if (!(dirname = mkdtemp(template))) {
-		error("Cannot create temporary mount point for EFI partition");
+		error("Cannot create temporary mount point for EFI partition\n");
+		free(loc);
 		return NULL;
 	}
 
 	if (mount(device_path, dirname, "vfat", 0, NULL) < 0) {
 		(void) rmdir(dirname);
 		error("Unable to mount %s on %s\n", device_path, dirname);
+		free(loc);
 		return NULL;
 	}
 
