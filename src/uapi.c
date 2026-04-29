@@ -225,7 +225,7 @@ uapi_find_boot_entry(const uapi_kernel_entry_tokens_t *match, const char *machin
 {
 	uapi_boot_entry_t *best = NULL;
 	struct utsname uts;
-	const char *architecture;
+	const char *architecture = NULL;
 
 	if (uname(&uts) >= 0)
 		architecture = uts.machine;
