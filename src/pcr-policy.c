@@ -152,17 +152,6 @@ set_srk_rsa_bits (const unsigned int rsa_bits)
 	RSA_SRK_template.publicArea.parameters.rsaDetail.keyBits = rsa_bits;
 }
 
-static inline const tpm_evdigest_t *
-tpm_evdigest_from_TPM2B_DIGEST(const TPM2B_DIGEST *td, tpm_evdigest_t *result, const tpm_algo_info_t *algo_info)
-{
-	memset(result, 0, sizeof(*result));
-	result->algo = algo_info;
-	result->size = td->size;
-	memcpy(result->data, td->buffer, td->size);
-
-	return result;
-}
-
 static bool
 write_digest(const char *path, const TPM2B_DIGEST *d)
 {
