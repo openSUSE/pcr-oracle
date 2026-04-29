@@ -1148,8 +1148,10 @@ pcr_seal_secret(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 	if (!(pcr_policy = __pcr_policy_make(esys_context, bank)))
 		return false;
 
-	if (!pcr_bank_to_selection(&pcr_sel, bank))
+	if (!pcr_bank_to_selection(&pcr_sel, bank)) {
+		free(pcr_policy);
 		return false;
+	}
 
 	ok = esys_seal_secret(platform, esys_context, pcr_policy, &pcr_sel,
 			      opt_persistent_srk, input_path, output_path);
