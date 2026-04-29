@@ -43,6 +43,9 @@ __tpm_event_parse_efi_device_path(efi_device_path_t *path, buffer_t *bp)
 		 || !buffer_get_u16le(bp, &item->len))
 			return false;
 
+		if (item->len < 4)
+			return false;
+
 		/* encoded len includes the size of the header */
 		item->len -= 4;
 
