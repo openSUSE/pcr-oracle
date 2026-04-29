@@ -124,7 +124,6 @@ static struct option options[] = {
 	{ "after",		no_argument,		0,	OPT_AFTER },
 	{ "before",		no_argument,		0,	OPT_BEFORE },
 	{ "verify",		required_argument,	0,	OPT_VERIFY },
-	{ "use-pesign",		no_argument,		0,	OPT_USE_PESIGN },
 	{ "boot-entry",		required_argument,	0,	OPT_BOOT_ENTRY },
 	{ "create-testcase",	required_argument,	0,	OPT_CREATE_TESTCASE },
 	{ "replay-testcase",	required_argument,	0,	OPT_REPLAY_TESTCASE },
@@ -151,7 +150,6 @@ static struct option options[] = {
 };
 
 unsigned int opt_debug	= 0;
-unsigned int opt_use_pesign = 0;
 
 static void	predictor_report_plain(struct predictor *pred, unsigned int pcr_index);
 static void	predictor_report_tpm2_tools(struct predictor *pred, unsigned int pcr_index);
@@ -722,7 +720,6 @@ predictor_update_eventlog(struct predictor *pred)
 	predictor_pre_scan_eventlog(pred, &stop_event);
 
 	tpm_event_log_rehash_ctx_init(&rehash_ctx, pred->algo_info);
-	rehash_ctx.use_pesign = opt_use_pesign;
 
 	/* The argument given to --next-kernel will be either "auto" or the
 	 * systemd ID of the next kernel entry to be booted.
@@ -1239,9 +1236,6 @@ main(int argc, char **argv)
 			break;
 		case 'd':
 			opt_debug += 1;
-			break;
-		case OPT_USE_PESIGN:
-			opt_use_pesign = 1;
 			break;
 		case OPT_BOOT_ENTRY:
 			opt_boot_entry = optarg;
