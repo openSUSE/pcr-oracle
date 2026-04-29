@@ -644,6 +644,7 @@ win_cert_free(win_cert_t *cert)
 	buffer_free(cert->blob);
 	if (cert->signer_cert)
 		buffer_free(cert->signer_cert);
+	free(cert);
 }
 
 cert_table_t *
