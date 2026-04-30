@@ -201,7 +201,7 @@ read_secret(const char *path)
 	buffer_t *bp;
 
 	if (!(bp = buffer_read_file(path, 0)))
-		return false;
+		return NULL;
 
 	sd = calloc(1, sizeof(*sd));
 
