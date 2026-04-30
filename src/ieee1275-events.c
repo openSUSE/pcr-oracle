@@ -106,7 +106,7 @@ __tpm_event_grub_envblk_rehash(const tpm_event_t *ev, const tpm_parsed_event_t *
 	if (evspec->prep_partition == NULL)
 		return NULL;
 
-	return runtime_digest_prep_envblk(ctx->algo, evspec->prep_partition);;
+	return runtime_digest_prep_envblk(ctx->algo, evspec->prep_partition);
 }
 
 bool
