@@ -750,8 +750,8 @@ predictor_update_eventlog(struct predictor *pred)
 
 		pcr = predictor_get_pcr_state(pred, ev->pcr_index, NULL);
 		if (pcr != NULL) {
-			tpm_parsed_event_t *parsed;
-			const tpm_evdigest_t *old_digest, *new_digest;
+			tpm_parsed_event_t *parsed = NULL;
+			const tpm_evdigest_t *old_digest = NULL, *new_digest = NULL;
 			const char *description = NULL;
 
 			debug("\n");
