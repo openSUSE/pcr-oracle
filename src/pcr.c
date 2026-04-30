@@ -212,7 +212,8 @@ pcr_bank_init_from_snapshot(tpm_pcr_bank_t *bank, const char *efivar_path)
 	/* The efivarfs files are not seekable. Use fread() to skip over
 	 * 4 bytes of variable attributes
 	 */
-	fread(buf, 4, 1, fp);
+	if (fread(buf, 1, 4, fp) != 4)
+		fatal("Unable to skip the first 4 bytes of %s\n", efivar_path);
 
 	pcr_bank_init_from_snapshot_fp(fp, bank);
 }
