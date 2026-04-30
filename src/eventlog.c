@@ -566,8 +566,8 @@ tpm_event_decode_uuid(const unsigned char *data)
 	uint16_t hw0, hw1;
 
 	w0 = le32toh(((uint32_t *) data)[0]);
-	hw0 = le32toh(((uint16_t *) data)[2]);
-	hw1 = le32toh(((uint16_t *) data)[3]);
+	hw0 = le16toh(((uint16_t *) data)[2]);
+	hw1 = le16toh(((uint16_t *) data)[3]);
 	snprintf(uuid, sizeof(uuid), "%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 			w0, hw0, hw1,
 			data[8], data[9],
