@@ -760,19 +760,6 @@ predictor_update_eventlog(struct predictor *pred)
 			if (!ev->synthetic && !(old_digest = tpm_event_get_digest(ev, pred->algo_info)))
 				fatal("Event log lacks a hash for digest algorithm %s\n", pred->algo);
 
-			if (false) {
-				const tpm_evdigest_t *tmp_digest;
-
-				tmp_digest = digest_compute(pred->algo_info, ev->event_data, ev->event_size);
-				if (!tmp_digest) {
-					debug("cannot compute digest for event data\n");
-				} else if (!digest_equal(old_digest, tmp_digest)) {
-					debug("firmware did more than just hash the event data\n");
-					debug("  Old digest: %s\n", digest_print(old_digest));
-					debug("  New digest: %s\n", digest_print(tmp_digest));
-				}
-			}
-
 			/* By the time we encounter the GPT event, we usually haven't seen any
 			 * BOOT_SERVICES event that would tell us which partition we're booting
 			 * from.
