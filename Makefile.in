@@ -1,7 +1,7 @@
 VERSION		= @PCR_ORACLE_VERSION@
 PKGNAME		= pcr-oracle-$(VERSION)
 
-CCOPT		= -O0 -g
+CCOPT		= -fstack-protector-strong -D_FORTIFY_SOURCE=2 -fPIE -pie -Wl,-z,relro,-z,now -O1 -g
 FIRSTBOOTDIR	= /usr/share/jeos-firstboot
 CFLAGS		= -Wall @TSS2_ESYS_CFLAGS@ @JSON_CFLAGS@ @FDISK_CFLAGS@ @LIBELF_CFLAGS@ $(CCOPT)
 TSS2_LINK	= -ltss2-esys -ltss2-tctildr -ltss2-rc -ltss2-mu -lcrypto
