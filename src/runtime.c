@@ -392,9 +392,14 @@ is_parent_block(char *blkname)
 {
 	char buf[PATH_MAX];
 	struct stat f_stat;
+	int ret;
 
 	/* Check /sys/block/<blkname>/dev */
-	snprintf(buf, PATH_MAX, "%s/%s/dev", SYSFS_BLOCK_PATH, blkname);
+	ret = snprintf(buf, PATH_MAX, "%s/%s/dev", SYSFS_BLOCK_PATH, blkname);
+	if (ret >= sizeof(buf)) {
+		error("Unable to construct sysfs path for %s\n", blkname);
+		return false;
+	}
 
 	return (stat(buf, &f_stat) == 0);
 }
