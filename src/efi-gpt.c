@@ -102,6 +102,15 @@ __tpm_event_efi_gpt_rebuild(const char *device)
 	 || !buffer_get_u32le(buffer, &gpt_entry_size))
 		goto bad_header;
 
+	/* Standard GPTs use 128 entries of 128 bytes each. Capping both
+	 * NumberOfPartitionEntries and SizeOfPartitionEntry at 4096
+	 * safely limits memory allocation while providing ample headroom
+	 * for edge cases.
+	 */
+	if (gpt_num_entries == 0 || gpt_num_entries > 4096
+	 || gpt_entry_size  == 0 || gpt_entry_size  > 4096)
+		goto bad_header;
+
 	num_tbl_bytes = (gpt_num_entries * gpt_entry_size + 511) & ~511;
 
 	/* Start building the event. The first part is the GPT header */
