@@ -37,8 +37,11 @@ secure_boot_enabled()
 	}
 
 	if (!buffer_get_u8(data,  &enabled)) {
-		 return false;
+		buffer_free(data);
+		return false;
 	}
+
+	buffer_free(data);
 
 	return enabled == 1;
 }
