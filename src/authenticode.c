@@ -210,7 +210,7 @@ pecoff_placement_compare(const void *a, const void *b)
 	const pecoff_placement_t *pa = a;
 	const pecoff_placement_t *pb = b;
 
-	return (int) pa->addr - (int) pb->addr;
+	return (pa->addr > pb->addr) - (pa->addr < pb->addr);
 }
 
 static void
