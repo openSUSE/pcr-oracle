@@ -279,6 +279,8 @@ testcase_free(testcase_t *tc)
 		fclose(tc->hash_log_fp);
 		tc->hash_log_fp = NULL;
 	}
+
+	free(tc);
 }
 
 void
