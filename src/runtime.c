@@ -752,7 +752,7 @@ runtime_digest_prep_booloader(const tpm_algo_info_t *algo, const char *prep_part
 	md = digest_compute(algo, buffer->data, bootloader_size);
 
 failed:
-	if (prep_io >= 0)
+	if (prep_io != NULL)
 		runtime_blockdev_close(prep_io);
 	if (buffer)
 		buffer_free(buffer);
@@ -805,7 +805,7 @@ runtime_digest_prep_envblk(const tpm_algo_info_t *algo, const char *prep_partiti
 	md = digest_compute(algo, buffer->data, GRUB_ENVBLK_SIZE);
 
 failed:
-	if (io >= 0)
+	if (io != NULL)
 		runtime_blockdev_close(io);
 	if (buffer)
 		buffer_free(buffer);

@@ -143,7 +143,7 @@ __tpm_event_efi_gpt_rebuild(const char *device)
 	}
 
 out:
-	if (fd >= 0)
+	if (fd != NULL)
 		runtime_blockdev_close(fd);
 	if (buffer)
 		buffer_free(buffer);
