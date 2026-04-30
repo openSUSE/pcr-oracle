@@ -1301,7 +1301,6 @@ pcr_authorized_policy_unseal_secret(const tpm_pcr_selection_t *pcr_selection,
 	ESYS_CONTEXT *esys_context = tss_esys_context();
 	tpm_pcr_bank_t pcr_current_bank;
 	TPMT_SIGNATURE *policy_signature = NULL;
-	tpm_rsa_key_t *rsa_key = NULL;
 	TPM2B_PUBLIC *pub_key = NULL;
 	TPM2B_PRIVATE *sealed_private = NULL;
 	TPM2B_PUBLIC *sealed_public = NULL;
@@ -1343,8 +1342,6 @@ cleanup:
 		free(policy_signature);
 	if (pub_key)
 		free(pub_key);
-	if (rsa_key)
-		tpm_rsa_key_free(rsa_key);
 
 	return okay;
 }
