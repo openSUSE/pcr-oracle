@@ -105,7 +105,9 @@ __tpm_event_efi_variable_build_event(const tpm_parsed_event_t *parsed, const voi
 #define SBAT_ORIGINAL "sbat,1,2021030218\n"
 
 static bool
-parse_sbatlevel_section(buffer_t *sec, char **sbat_automatic, char **sbat_latest)
+parse_sbatlevel_section(buffer_t *sec,
+                        char **sbat_automatic, size_t *auto_len,
+                        char **sbat_latest,    size_t *latest_len)
 {
 	uint32_t fmt_ver;
 	uint32_t offset_auto;
@@ -122,10 +124,12 @@ parse_sbatlevel_section(buffer_t *sec, char **sbat_automatic, char **sbat_latest
 	if (!buffer_seek_read(sec, offset_auto + 4))
 		return false;
 	*sbat_automatic = (char *)buffer_read_pointer(sec);
+	*auto_len = offset_latest - (offset_auto + 4);
 
 	if (!buffer_seek_read(sec, offset_latest + 4))
 		return false;
 	*sbat_latest = (char *)(buffer_read_pointer(sec));
+	*latest_len = buffer_available(sec);
 
 	return true;
 }
@@ -165,6 +169,7 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 	char *sbat_latest;
 	const char *sbat_candidate;
 	const char *sbat_current;
+	size_t auto_len, latest_len, candidate_len;
 	buffer_t *buffer = NULL;
 	buffer_t *sbatlvlrt = NULL;
 	buffer_t *result = NULL;
@@ -175,12 +180,13 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 	uint32_t candidate_date;
 	bool sbat_reset = false;
 
-	if (!parse_sbatlevel_section(sbatlevel, &sbat_automatic, &sbat_latest)) {
+	if (!parse_sbatlevel_section(sbatlevel, &sbat_automatic, &auto_len,
+	                             &sbat_latest, &latest_len)) {
 		error("Unable to process SbatLevel\n");
 		return NULL;
 	}
 
-	if (!fetch_sbat_datestamp(sbat_automatic, strlen(sbat_automatic), &auto_date)) {
+	if (!fetch_sbat_datestamp(sbat_automatic, auto_len, &auto_date)) {
 		error("Unable to get datestamp of SBAT automatic\n");
 		return NULL;
 	}
@@ -198,30 +204,37 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 	switch (sbatpolicy) {
 	case POLICY_LATEST:
 		sbat_candidate = sbat_latest;
+		candidate_len = latest_len;
 		break;
 	case POLICY_AUTOMATIC:
 		sbat_candidate = sbat_automatic;
+		candidate_len = auto_len;
 		break;
 	case POLICY_RESET:
 		if (secureboot == 1) {
 			infomsg("SBAT cannot be reset when Secure Boot is enabled.\n");
 			sbat_candidate = sbat_automatic;
+			candidate_len = auto_len;
 		} else {
 			sbat_reset = true;
 			sbat_candidate = SBAT_ORIGINAL;
+			candidate_len = sizeof(SBAT_ORIGINAL) - 1;
 		}
 		break;
 	case POLICY_NOTREAD:
 		if (secureboot == 1) {
 			sbat_candidate = sbat_automatic;
+			candidate_len = auto_len;
 		} else {
 			/* shim 15.8 always resets SbatLevel when Secure Boot is disabled.
 			 * The automatic datestamp of shim 15.8 is 2023012900. */
 			if (auto_date >= 2023012900) {
 				sbat_reset = true;
 				sbat_candidate = SBAT_ORIGINAL;
+				candidate_len = sizeof(SBAT_ORIGINAL) - 1;
 			} else {
 				sbat_candidate = sbat_automatic;
+				candidate_len = auto_len;
 			}
 		}
 		break;
@@ -238,7 +251,7 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 	sbat_current = (const char *)buffer_read_pointer(sbatlvlrt);
 
 	if (!fetch_sbat_datestamp(sbat_current, sbatlvlrt->size, &current_date)
-	 || !fetch_sbat_datestamp(sbat_candidate, strlen(sbat_candidate), &candidate_date)) {
+	 || !fetch_sbat_datestamp(sbat_candidate, candidate_len, &candidate_date)) {
 		error("Unable to get SBAT datestamp\n");
 		goto fail;
 	}
@@ -254,8 +267,8 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 		buffer_free(sbatlvlrt);
 
 		/* Copy the candidate SbatLevel string without the terminating null */
-		if ((result = buffer_alloc_write(strlen(sbat_candidate))) == NULL
-		 || !buffer_put(result, sbat_candidate, strlen(sbat_candidate)))
+		if ((result = buffer_alloc_write(candidate_len)) == NULL
+		 || !buffer_put(result, sbat_candidate, candidate_len))
 			goto fail;
 	}
 
