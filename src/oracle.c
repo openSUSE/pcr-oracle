@@ -316,11 +316,8 @@ __stop_event_parse(char *event_spec, char **name_p, char **value_p)
 {
 	char *s;
 
-	if (!(s = strchr(event_spec, '='))) {
-		*name_p = event_spec;
-		*value_p = NULL;
-		return true;
-	}
+	if (!(s = strchr(event_spec, '=')))
+		return false;
 
 	*s++ = '\0';
 	if (*event_spec == '\0')
