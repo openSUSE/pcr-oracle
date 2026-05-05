@@ -57,6 +57,11 @@ pcr_selection_new(const char *algo_name, const char *pcr_spec)
 		return NULL;
 	}
 
+	if (pcr_mask == 0) {
+		error("Empty PCR mask\n");
+		return NULL;
+	}
+
 	algo_info = digest_by_name(algo_name? : "sha256");
 	if (algo_info == NULL) {
 		error("Hash algorithm \"%s\" not supported\n", algo_name);
