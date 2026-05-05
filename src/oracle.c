@@ -1088,14 +1088,14 @@ predictor_report_binary(struct predictor *pred, unsigned int pcr_index)
 	if (!(pcr = predictor_get_pcr_state(pred, pcr_index, NULL)))
 		return;
 	if (fwrite(pcr->data, pcr->size, 1, stdout) != 1)
-		fatal("failed to write hash to stdout");
+		fatal("failed to write hash to stdout\n");
 }
 
 static const char *
 next_argument(int argc, char **argv)
 {
 	if (optind >= argc)
-		usage(1, "Missing argument(s)");
+		usage(1, "Missing argument(s)\n");
 	return argv[optind++];
 }
 
@@ -1103,7 +1103,7 @@ static void
 end_arguments(int argc, char **argv)
 {
 	if (optind < argc)
-		usage(1, "Excess argument(s)");
+		usage(1, "Excess argument(s)\n");
 }
 
 static int
@@ -1305,7 +1305,7 @@ main(int argc, char **argv)
 		case 'h':
 			usage(0, NULL);
 		default:
-			usage(1, "Invalid option");
+			usage(1, "Invalid option\n");
 		}
 	}
 
@@ -1386,9 +1386,9 @@ main(int argc, char **argv)
 		}
 
 		if ((action_flags & PLATFORM_NEED_INPUT_FILE) && !opt_input)
-			usage(1, "You need to specify an input file via --input when unsealing a secret");
+			usage(1, "You need to specify an input file via --input when unsealing a secret\n");
 		if ((action_flags & PLATFORM_NEED_OUTPUT_FILE) && !opt_output)
-			usage(1, "You need to specify an output file via --output when unsealing a secret");
+			usage(1, "You need to specify an output file via --output when unsealing a secret\n");
 		if (action_flags & PLATFORM_NEED_PCR_SELECTION)
 			pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		end_arguments(argc, argv);
@@ -1412,7 +1412,7 @@ main(int argc, char **argv)
 		break;
 
 	default:
-		fatal("Action %u not implemented", action);
+		fatal("Action %u not implemented\n", action);
 	}
 
 	/* If we're asked to generate a new RSA key, do so.  This
@@ -1480,11 +1480,11 @@ main(int argc, char **argv)
 	}
 
 	if (opt_stop_event && (!opt_from || strcmp(opt_from, "eventlog")))
-		usage(1, "--stop-event only makes sense when using event log");
+		usage(1, "--stop-event only makes sense when using event log\n");
 
 	/* If pcr_selection is NULL, the programmer must have been sloppy. */
 	if (pcr_selection == NULL)
-		fatal("BUG: action %u should have parsed a PCR selection argument", action);
+		fatal("BUG: action %u should have parsed a PCR selection argument\n", action);
 
 	pred = predictor_new(pcr_selection, opt_from, opt_eventlog_path,
 			opt_output_format, opt_boot_entry);
