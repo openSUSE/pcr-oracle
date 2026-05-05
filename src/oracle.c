@@ -251,6 +251,9 @@ predictor_load_eventlog(struct predictor *pred)
 		tail = &ev->next;
 	}
 
+	if (pred->event_log == NULL)
+		fatal("Empty TPM event log\n");
+
 	if (event_log_get_locality(log, 0, &pcr0_locality))
 		pcr_bank_set_locality(&pred->prediction, 0, pcr0_locality);
 
