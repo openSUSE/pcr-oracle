@@ -62,6 +62,7 @@ jobs:
         ./test-systemd.sh
         ./test-tpm2key.sh
         ./test-authorized.sh
+        ./test-adversarial.sh
 
         # Shutdown swtpm
         swtpm_ioctl -s --unix /tmp/swtpm-sock.ctrl
