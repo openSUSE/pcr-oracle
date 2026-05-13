@@ -118,7 +118,7 @@ parse_sbatlevel_section(buffer_t *sec,
 	 || !buffer_get_u32le(sec, &offset_latest))
 		return false;
 
-	if (offset_auto >= offset_latest)
+	if (offset_auto + 4 > offset_latest)
 		return false;
 
 	if (!buffer_seek_read(sec, offset_auto + 4))
