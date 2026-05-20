@@ -217,11 +217,6 @@ tpm_check_capabilities(void)
 		return false;
 	}
 
-	if ((prop_startup & TPMA_STARTUP_CLEAR_EHENABLE) == 0) {
-		error("Endorsement hierarchy not enabled\n");
-		return false;
-	}
-
 	/* Check PropertyPermanent (TPM2_PT_PERMANENT) */
 	if (!tpm_get_tpm_property(TPM2_PT_PERMANENT, &prop_permanent)) {
 		error("Failed to get PropertyPermanent\n");
@@ -233,39 +228,13 @@ tpm_check_capabilities(void)
 		return false;
 	}
 
-	if ((prop_permanent & TPMA_PERMANENT_ENDORSEMENTAUTHSET) != 0) {
-		error("TPM2 Endorsement Authorization set\n");
-		return false;
-	}
-
-	if ((prop_permanent & TPMA_PERMANENT_LOCKOUTAUTHSET) != 0) {
-		error("TPM2 Lockout Authorization set\n");
-		return false;
-	}
-
-	if ((prop_permanent & TPMA_PERMANENT_INLOCKOUT) != 0) {
-		error("TPM2 in lockout\n");
-		return false;
-	}
-
 #ifdef TPM2_CAP_AUTH_POLICIES
 	/*
 	 * Ensure that there is no authorization policy associated with the
-	 * following hierarchies: TPM2_RH_LOCKOUT, TPM2_RH_OWNER, and
-	 * TPM2_RH_ENDORSEMENT
+	 * TPM2_RH_OWNER hierarchy.
 	 */
-	if (!tpm_check_auth_policies(TPM2_RH_LOCKOUT)) {
-		error("Error from LockOut handle\n");
-		return false;
-	}
-
 	if (!tpm_check_auth_policies(TPM2_RH_OWNER)) {
 		error("Error from Owner handle\n");
-		return false;
-	}
-
-	if (!tpm_check_auth_policies(TPM2_RH_ENDORSEMENT)) {
-		error("Error from Endorsement handle\n");
 		return false;
 	}
 #endif
