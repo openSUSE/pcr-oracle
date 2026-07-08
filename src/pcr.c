@@ -205,20 +205,23 @@ pcr_bank_init_from_snapshot_fp(FILE *fp, tpm_pcr_bank_t *bank)
 }
 
 void
-pcr_bank_init_from_snapshot(tpm_pcr_bank_t *bank, const char *efivar_path)
+pcr_bank_init_from_snapshot(tpm_pcr_bank_t *bank, const char *snapshot_path)
 {
 	FILE *fp;
 	char buf[4];
 
-	debug("Trying to find PCR values in %s\n", efivar_path);
-	if (!(fp = fopen(efivar_path, "r")))
-		fatal("Unable to open \"%s\": %m\n", efivar_path);
+	debug("Trying to find PCR values in %s\n", snapshot_path);
+	if (!(fp = fopen(snapshot_path, "r")))
+		fatal("Unable to open \"%s\": %m\n", snapshot_path);
 
 	/* The efivarfs files are not seekable. Use fread() to skip over
-	 * 4 bytes of variable attributes
+	 * 4 bytes of variable attributes. Device tree or other regular files
+	 * do not have this attribute prefix.
 	 */
-	if (fread(buf, 1, 4, fp) != 4)
-		fatal("Unable to skip the first 4 bytes of %s\n", efivar_path);
+	if (strstr(snapshot_path, "/efivars/") != NULL) {
+		if (fread(buf, 1, 4, fp) != 4)
+			fatal("Unable to skip the first 4 bytes of %s\n", snapshot_path);
+	}
 
 	pcr_bank_init_from_snapshot_fp(fp, bank);
 }
