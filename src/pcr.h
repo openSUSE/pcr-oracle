@@ -49,7 +49,7 @@ extern tpm_evdigest_t *	pcr_bank_get_register(tpm_pcr_bank_t *bank, unsigned int
 extern void		pcr_bank_set_locality(tpm_pcr_bank_t *bank, unsigned int index, uint8_t locality);
 extern void		pcr_bank_init_from_zero(tpm_pcr_bank_t *bank);
 extern void		pcr_bank_init_from_snapshot_fp(FILE *fp, tpm_pcr_bank_t *bank);
-extern void		pcr_bank_init_from_snapshot(tpm_pcr_bank_t *bank, const char *efivar_path);
+extern void		pcr_bank_init_from_snapshot(tpm_pcr_bank_t *bank, const char *snapshot_path);
 extern void		pcr_bank_init_from_current(tpm_pcr_bank_t *bank);
 
 extern bool		pcr_selection_valid_string(const char *);

@@ -80,7 +80,8 @@ struct predictor {
 	bool			disable_synthesis;
 };
 
-#define GRUB_PCR_SNAPSHOT_PATH	"/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
+#define GRUB_EFI_PCR_SNAPSHOT_PATH	"/sys/firmware/efi/efivars/GrubPcrSnapshot-7ce323f2-b841-4d30-a0e9-5474a76c9a3f"
+#define GRUB_DT_PCR_SNAPSHOT_PATH	"/sys/firmware/devicetree/base/chosen/grub,pcr-snapshot"
 
 enum {
 	OPT_FROM = 256,
@@ -196,7 +197,7 @@ usage(int exitval, const char *msg)
 		"Valid PCR sources for the --from and --verify options include:\n"
                 "  zero                   Initialize PCR state to all zero\n"
                 "  current                Set the PCR state to the current state of the host's PCR\n"
-                "  snapshot               Read the PCR state from a snapshot taken during boot (GrubPcrSnapshot EFI variable)\n"
+                "  snapshot               Read the PCR state from a snapshot taken during boot (GrubPcrSnapshot EFI variable or devicetree)\n"
                 "  eventlog               Predict the PCR state using the event log, by substituting current values. Only valid\n"
                 "                         as argument to --from.\n"
 		"\n"
@@ -220,9 +221,14 @@ pcr_bank_load_initial_values(tpm_pcr_bank_t *bank, unsigned int pcr_mask, const 
 		pcr_bank_init_from_zero(bank);
 	else if (!strcmp(source, "current"))
 		pcr_bank_init_from_current(bank);
-	else if (!strcmp(source, "snapshot"))
-		pcr_bank_init_from_snapshot(bank, GRUB_PCR_SNAPSHOT_PATH);
-	else
+	else if (!strcmp(source, "snapshot")) {
+		const char *path = GRUB_EFI_PCR_SNAPSHOT_PATH;
+
+		if (access(path, R_OK) != 0 && access(GRUB_DT_PCR_SNAPSHOT_PATH, R_OK) == 0)
+			path = GRUB_DT_PCR_SNAPSHOT_PATH;
+
+		pcr_bank_init_from_snapshot(bank, path);
+	} else
 		fatal("don't know how to load PCR bank with initial values: unsupported source \"%s\"\n", source);
 }
 
