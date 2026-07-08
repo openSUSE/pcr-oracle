@@ -1089,7 +1089,7 @@ __tpm_event_parse_tag(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
 	return true;
 }
 
-#define GRUB_PREP_ENVBLK "PReP ENV Block"
+#define GRUB_PREP_ENVBLK "PReP envblk"
 
 static bool
 __tpm_event_parse_ipl(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t *bp)
