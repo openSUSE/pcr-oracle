@@ -112,24 +112,61 @@ parse_sbatlevel_section(buffer_t *sec,
 	uint32_t fmt_ver;
 	uint32_t offset_auto;
 	uint32_t offset_latest;
+	size_t limit;
 
+	/*
+	 * The structure of the .sbatlevel section:
+	 * +--------+-----------------------------------------+
+	 * | Offset | Field / Content                         |
+	 * +--------+-----------------------------------------+
+	 * | 0x00   | Format Version (always 0, 4-byte int)   |
+	 * +--------+-----------------------------------------+
+	 * | 0x04   | Offset to Automatic SBAT Payload        |
+	 * |        | (4-byte int, relative to 0x04)          |
+	 * +--------+-----------------------------------------+
+	 * | 0x08   | Offset to Latest SBAT Payload           |
+	 * |        | (4-byte int, relative to 0x04)          |
+	 * +--------+-----------------------------------------+
+	 * | ...    | Automatic SBAT Payload String (\0-term) |
+	 * +--------+-----------------------------------------+
+	 * | ...    | Latest SBAT Payload String (\0-term)    |
+	 * +--------+-----------------------------------------+
+	 *
+	 * Note: In the SbatLevelRT variable, the terminating null
+	 *       is excluded, so 'auto_len' and 'latest_len' should
+	 *       not include '\0'.
+	 */
 	if (!buffer_get_u32le(sec, &fmt_ver)
 	 || !buffer_get_u32le(sec, &offset_auto)
 	 || !buffer_get_u32le(sec, &offset_latest))
 		return false;
 
-	if (offset_auto + 4 > offset_latest)
+	/*
+	 * Prevent integer overflow of offset_latest and offset_auto and
+	 * validate that the SBAT payloads (at least sizeof(SBAT_ORIGINAL)
+	 * long) fit completely within the buffer.
+	 */
+	if (offset_latest >= sec->wpos ||
+	    offset_latest + 4 + sizeof(SBAT_ORIGINAL) > sec->wpos)
+		return false;
+
+	if (offset_auto > offset_latest ||
+	    offset_auto + sizeof(SBAT_ORIGINAL) > offset_latest)
 		return false;
 
 	if (!buffer_seek_read(sec, offset_auto + 4))
 		return false;
 	*sbat_automatic = (char *)buffer_read_pointer(sec);
-	*auto_len = offset_latest - (offset_auto + 4);
+
+	limit = offset_latest - offset_auto;
+	*auto_len = strnlen(*sbat_automatic, limit);
 
 	if (!buffer_seek_read(sec, offset_latest + 4))
 		return false;
 	*sbat_latest = (char *)(buffer_read_pointer(sec));
-	*latest_len = buffer_available(sec);
+
+	limit = sec->wpos - (offset_latest + 4);
+	*latest_len = strnlen(*sbat_latest, limit);
 
 	return true;
 }
@@ -266,7 +303,7 @@ efi_sbatlevel_get_record(buffer_t *sbatlevel)
 		debug("Use candidate SbatLevel\n");
 		buffer_free(sbatlvlrt);
 
-		/* Copy the candidate SbatLevel string without the terminating null */
+		/* Copy the candidate SbatLevel string */
 		if ((result = buffer_alloc_write(candidate_len)) == NULL
 		 || !buffer_put(result, sbat_candidate, candidate_len))
 			goto fail;
