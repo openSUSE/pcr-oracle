@@ -7,7 +7,9 @@
 PCR_MASK=0,2,4,12
 
 pcr_oracle=pcr-oracle
-if [ -x pcr-oracle ]; then
+if [ -x "$(dirname "$0")/../pcr-oracle" ]; then
+	pcr_oracle=$(cd "$(dirname "$0")/.." && pwd)/pcr-oracle
+elif [ -x pcr-oracle ]; then
 	pcr_oracle=$PWD/pcr-oracle
 fi
 
