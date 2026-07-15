@@ -63,6 +63,7 @@ jobs:
         ./tests/test-tpm2key.sh
         ./tests/test-authorized.sh
         ./tests/test-adversarial.sh
+        ./tests/test-replay.sh
 
         # Shutdown swtpm
         swtpm_ioctl -s --unix /tmp/swtpm-sock.ctrl
