@@ -58,11 +58,11 @@ jobs:
         export PCRORACLE_TCTI="swtpm:path=/tmp/swtpm-sock"
 
         # Run the test scripts
-        ./test-pcr.sh
-        ./test-systemd.sh
-        ./test-tpm2key.sh
-        ./test-authorized.sh
-        ./test-adversarial.sh
+        ./tests/test-pcr.sh
+        ./tests/test-systemd.sh
+        ./tests/test-tpm2key.sh
+        ./tests/test-authorized.sh
+        ./tests/test-adversarial.sh
 
         # Shutdown swtpm
         swtpm_ioctl -s --unix /tmp/swtpm-sock.ctrl

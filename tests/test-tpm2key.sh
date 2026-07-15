@@ -7,7 +7,9 @@
 PCR_MASK=0,2,4,12
 
 pcr_oracle=pcr-oracle
-if [ -x pcr-oracle ]; then
+if [ -x "$(dirname "$0")/../pcr-oracle" ]; then
+	pcr_oracle=$(cd "$(dirname "$0")/.." && pwd)/pcr-oracle
+elif [ -x pcr-oracle ]; then
 	pcr_oracle=$PWD/pcr-oracle
 fi
 
@@ -37,7 +39,6 @@ call_oracle \
 	--from current \
 	--input secret \
 	--output sealed \
-	--ecc-srk \
 	seal-secret $PCR_MASK
 
 echo "Unseal the sealed with PCR policy"
@@ -74,7 +75,6 @@ call_oracle \
 	--auth authorized.policy \
 	--input secret \
 	--output sealed \
-	--ecc-srk \
 	seal-secret
 
 for attempt in first second; do

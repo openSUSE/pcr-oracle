@@ -107,7 +107,7 @@ However, it already supports the creation of, and sealing against,
 authorized policies.
 
 For an example of how to use pcr-oracle with authorized policies,
-please refer to test-authorized.sh
+please refer to tests/test-authorized.sh
 
 
 ## Generate and submit test cases

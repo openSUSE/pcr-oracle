@@ -69,7 +69,7 @@ DIST_FILES = \
 	man \
 	configure microconf \
 	README.md \
-	test-authorized.sh
+	tests
 
 dist:
 	mkdir -p $(PKGNAME)
