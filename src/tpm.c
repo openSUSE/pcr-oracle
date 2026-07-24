@@ -323,3 +323,28 @@ tpm_rsa_bits_test(unsigned int rsa_bits)
 
 	return okay;
 }
+
+bool
+tpm_ecc_test(void)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	TPMT_PUBLIC_PARMS parms = {0};
+	TSS2_RC rc;
+	bool okay = false;
+
+	/* Suppress the messages from tpm2-tss */
+	setenv("TSS2_LOG", "all+NONE", 1);
+
+	parms.type = TPM2_ALG_ECC;
+	memcpy(&parms.parameters, &ECC_SRK_template.publicArea.parameters,
+	       sizeof(TPMU_PUBLIC_PARMS));
+
+	rc = Esys_TestParms(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE,
+			ESYS_TR_NONE, &parms);
+	if (rc == TSS2_RC_SUCCESS)
+		okay = true;
+	else if (rc != (TPM2_RC_VALUE | TPM2_RC_P | TPM2_RC_1))
+		tss_check_error(rc, "Esys_TestParms failed");
+
+	return okay;
+}

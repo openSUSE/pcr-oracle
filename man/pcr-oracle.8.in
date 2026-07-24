@@ -118,6 +118,9 @@ Perform a TPM self-test to verify the chip exists and works.
 Check whether the TPM supports a given RSA key length. The desired key
 length is given using the \fB--rsa-bits\fP option.
 .TP
+.B ecc-test
+Check whether the TPM supports ECC SRK keys.
+.TP
 .B predict
 Try to predict a specific set of PCR values.
 .TP
