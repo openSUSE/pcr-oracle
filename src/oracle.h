@@ -27,6 +27,7 @@ extern bool		ima_is_active(void);
 extern buffer_t *	platform_read_shim_vendor_cert(void);
 extern bool		tpm_selftest(bool fulltest);
 extern bool		tpm_rsa_bits_test(unsigned int rsa_bits);
+extern bool		tpm_ecc_test(void);
 
 #endif /* PCR_ORACLE_H */
 

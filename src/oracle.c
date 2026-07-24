@@ -47,6 +47,7 @@ enum {
 	ACTION_SIGN,
 	ACTION_SELFTEST,
 	ACTION_RSATEST,
+	ACTION_ECCTEST,
 };
 
 enum {
@@ -1130,6 +1131,7 @@ get_action_argument(int argc, char **argv)
 		{ "sign",			ACTION_SIGN	},
 		{ "self-test",			ACTION_SELFTEST	},
 		{ "rsa-test",			ACTION_RSATEST	},
+		{ "ecc-test",			ACTION_ECCTEST	},
 
 		{ NULL, 0 },
 	};
@@ -1420,6 +1422,10 @@ main(int argc, char **argv)
 		end_arguments(argc, argv);
 		break;
 
+	case ACTION_ECCTEST:
+		end_arguments(argc, argv);
+		break;
+
 	default:
 		fatal("Action %u not implemented\n", action);
 	}
@@ -1446,6 +1452,16 @@ main(int argc, char **argv)
 			return 0;
 		} else {
 			infomsg("RSA %u unsupported\n", rsa_bits);
+			return 1;
+		}
+	}
+
+	if (action == ACTION_ECCTEST) {
+		if (tpm_ecc_test()) {
+			infomsg("ECC P-256 supported\n");
+			return 0;
+		} else {
+			infomsg("ECC P-256 unsupported\n");
 			return 1;
 		}
 	}
