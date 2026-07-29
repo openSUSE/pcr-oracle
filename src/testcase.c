@@ -379,7 +379,7 @@ testcase_playback_efi_directory(testcase_t *tc, const char *partition, const cha
 	partition = get_basename(partition);
 
 	snprintf(path, sizeof(path), "%s/%s/.dir_list", partition, directory);
-	return testcase_read_file(tc->bsa_directory, path);
+	return __testcase_read_file(tc->bsa_directory, path, RUNTIME_MISSING_FILE_OKAY);
 }
 
 void
