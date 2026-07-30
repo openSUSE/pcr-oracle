@@ -449,12 +449,32 @@ Specifying a source of \fBzero\fP will start prediction with all PCRs cleared.
 Specifying a source of \fBcurrent\fP will start prediction with all PCRs
 set to the current values of the system's TPM.
 .TP
+.BR -Z ", " --from-zero
+Shorthand to set the PCR initial state to zero. This is equivalent to
+\fB--from zero\fP.
+.TP
+.BR -C ", " --from-current
+Shorthand to set the PCR initial state to the current state of the host's PCRs. This is equivalent to
+\fB--from current\fP.
+.TP
+.BR -S ", " --from-snapshot
+Shorthand to set the PCR initial state to a snapshot taken during boot. This is equivalent to
+\fB--from snapshot\fP.
+.TP
+.BR -L ", " --from-eventlog
+Shorthand to set the PCR initial state predicted from the event log. This is equivalent to
+\fB--from eventlog\fP.
+.TP
 .BI --algorithm " hash-alg
 By default, \fBpcr-oracle\fP will operate on PCR registers that use  the
 sha256 hash algorithm. Using this option, you can select a different hash
 algorithm, assuming the chip supports it.
 For backward compatibility with version 1 of the specification, all TPMv2
 chips also support sha1, but using that is not recommended.
+.TP
+.BI --verify " source
+After applying all updates, compare the predicted PCR values against the given
+\fIsource\fP (e.g., \fBcurrent\fP or \fBsnapshot\fP).
 .TP
 .BI --format " fmt
 In prediction mode, \fBpcr-oracle\fP will write the predicted PCR values
@@ -496,6 +516,9 @@ events (tracked in PCR9). In this case, it would be totally sufficient
 to stop processing after grub loaded \fPgrub.cfg\fP from the EFI
 System Partition.
 .TP
+.B --disable-synthesis
+Disable predictive event synthesis and deduplication for shim extra files.
+.TP
 .BI --boot-entry " id
 In a systemd-boot environment, the values of PCR registers also depend on
 the contents of the kernel and initrd image, as well as the kernel command line
@@ -508,11 +531,24 @@ is either an ID (in the sense of systemd-boot IDs), or \fBauto\fP. When
 the latter is given, \fBpcr-oracle\fP will make a best guess as to what
 kernel image will be used on next boot.
 .TP
-.BI --authorized-policy " path
+.BI --next-kernel " name
+An alias for \fB--boot-entry\fP. Specifying this sets the boot entry to use for
+the next boot prediction.
+.TP
+.BI --auth " path\fR, " --authorized-policy " path"
 Specify the location of the authorized policy. In conjunction with
 the \fBcreate-authorized-policy\fP action, the newly created policy
 is written to this location. For subsequent actions, such as \fBseal\fP,
 the policy will be read from this location.
+.TP
+.BI --pcr-policy " path
+Specify the location of the PCR policy file used during authorized policy unsealing.
+.TP
+.BI --input " path
+Specify the input secret file path for sealing, or a sealed secret for unsealing.
+.TP
+.BI --output " path
+Specify the output destination path for sealing, unsealing, or public key storage.
 .TP
 .BI --private-key " path
 Specify the RSA secret key to be used with authorized policies.
@@ -536,6 +572,13 @@ private key and configure the storage root key(SRK) in TPM. This option
 allows the user to specify the larger RSA key size. The supported key
 sizes are: 2048, 3072, and 4096 bits.
 .TP
+.B --ecc-srk
+Switch the storage root key (SRK) configuration to Elliptic Curve Cryptography
+(ECC P-256) instead of the default RSA algorithm.
+.TP
+.BI --persistent-srk " handle/index
+Configure a persistent storage root key (SRK) handle or index on the TPM.
+.TP
 .BI --tpm-eventlog " path
 By default, the tool will read the current TPM event log. It is possible
 to process an event log generated on a different system by specifying it
@@ -546,11 +589,31 @@ Write key and policy information using file format(s) compatible
 with the specified target implementation. Please see the section
 \fBPolicy File Formats\fP for more information. 
 .TP
+.BI --key-format " name
+Deprecated alias for \fB--target-platform\fP. Prints a warning to use
+\fB--target-platform\fP instead.
+.TP
+.BI --policy-format " name
+Deprecated alias for \fB--target-platform\fP. Prints a warning to use
+\fB--target-platform\fP instead.
+.TP
 .BI --policy-name " name
 For the tpm2.0 format, there is an extra field, Name, for the authorized
 polices. This option is only valid when sigining the sealed key in
 \fBtpm2.0\fP format. The \fBName\fP is optional and only used for display
 purposes. If the user doesn't specify a name, the default name is 'default'.
+.TP
+.BI --create-testcase " path
+Dumps current boot state variables, files, and hashes into a directory tree at
+the given \fIpath\fP to create a test case for regression testing.
+.TP
+.BI --replay-testcase " path
+Replay a previously captured test case from the directory tree at \fIpath\fP,
+simulating the recorded system state.
+.TP
+.B --compare-current
+Complements \fB--replay-testcase\fP to compare predictions of the test case
+against the host's actual current event log.
 .\" ##################################################################
 .\" # SEE ALSO
 .\" ##################################################################
