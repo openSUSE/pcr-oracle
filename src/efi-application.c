@@ -669,6 +669,7 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 	size_t device_path_len;
 	buffer_t path_buf;
 	bool is_fullpath = false;
+	bool is_shim = false;
 
 	parsed->destroy = __tpm_event_efi_bsa_destroy;
 	parsed->print = __tpm_event_efi_bsa_print;
@@ -723,13 +724,17 @@ __tpm_event_parse_efi_bsa(tpm_event_t *ev, tpm_parsed_event_t *parsed, buffer_t 
 	if (!evspec->efi_application)
 		return true;
 
-	if (is_fullpath == true && ctx->first_application == NULL)
+	if (is_fullpath == true && ctx->first_application == NULL) {
 		assign_string(&ctx->first_application, evspec->efi_application);
+		is_shim = true;
+	}
 
 	__tpm_event_efi_bsa_inspect_image(evspec);
 
 	/* Deduplicate PCR 7 Authority event for the main bootloader, e.g. grub2 */
-	return deduplicate_main_authority_event(ev, evspec, ctx);
+	if (is_shim == false)
+		return deduplicate_main_authority_event(ev, evspec, ctx);
+	return true;
 }
 
 bool
