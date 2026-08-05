@@ -23,6 +23,9 @@
 
 #include "types.h"
 
+extern unsigned int	opt_debug;
+extern uint32_t		opt_nvindex;
+
 extern bool		ima_is_active(void);
 extern buffer_t *	platform_read_shim_vendor_cert(void);
 extern bool		tpm_selftest(bool fulltest);
