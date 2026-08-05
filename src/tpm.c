@@ -33,6 +33,7 @@
 
 #include "oracle.h"
 #include "tpm.h"
+#include "bufparser.h"
 #include "util.h"
 #include "config.h"
 
@@ -347,4 +348,114 @@ tpm_ecc_test(void)
 		tss_check_error(rc, "Esys_TestParms failed");
 
 	return okay;
+}
+
+static bool
+tpm_nvindex_exists(uint32_t nv_index)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	TPMS_CAPABILITY_DATA *cap_data = NULL;
+	TPMI_YES_NO more_data;
+	TSS2_RC rc;
+	bool exists = false;
+
+	rc = Esys_GetCapability(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+	                        TPM2_CAP_HANDLES, nv_index, 1, &more_data, &cap_data);
+	if (rc == TSS2_RC_SUCCESS && cap_data != NULL) {
+		if (cap_data->capability == TPM2_CAP_HANDLES &&
+		    cap_data->data.handles.count > 0 &&
+		    cap_data->data.handles.handle[0] == nv_index) {
+			exists = true;
+		}
+	}
+
+	if (cap_data)
+		free(cap_data);
+
+	return exists;
+}
+
+bool
+tpm_nvindex_write(uint32_t nv_index, const buffer_t *bp)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	ESYS_TR nv_tr = ESYS_TR_NONE;
+	TSS2_RC rc;
+	TPM2B_AUTH auth_value = { .size = 0 };
+	TPM2B_MAX_NV_BUFFER nv_buffer;
+	const void *data;
+	size_t size;
+	bool ok = false;
+
+	if (!bp) {
+		error("tpm_nvindex_write: buffer is NULL\n");
+		return false;
+	}
+
+	data = buffer_read_pointer(bp);
+	size = buffer_available(bp);
+
+	if (size > sizeof(nv_buffer.buffer)) {
+		error("Data size %zu exceeds maximum NV buffer size %zu\n", size, sizeof(nv_buffer.buffer));
+		return false;
+	}
+
+	/* Try to see if NV index is already defined */
+	if (tpm_nvindex_exists(nv_index)) {
+		rc = Esys_TR_FromTPMPublic(esys_ctx, nv_index,
+		                           ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+		                           &nv_tr);
+		if (rc == TSS2_RC_SUCCESS) {
+			/* Space is already defined, let's undefine it first */
+			debug("NV Index 0x%08x is already defined. Undefining it...\n", nv_index);
+			rc = Esys_NV_UndefineSpace(esys_ctx, esys_tr_rh_owner, nv_tr,
+			                           ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
+			if (!tss_check_error(rc, "Esys_NV_UndefineSpace failed"))
+				goto err;
+			Esys_TR_Close(esys_ctx, &nv_tr);
+			nv_tr = ESYS_TR_NONE;
+		}
+	}
+
+	/* Define the NV space */
+	TPM2B_NV_PUBLIC public_info = {
+		.size = 0,
+		.nvPublic = {
+			.nvIndex = nv_index,
+			.nameAlg = TPM2_ALG_SHA256,
+			.attributes = TPMA_NV_OWNERWRITE | TPMA_NV_OWNERREAD,
+			.authPolicy = { .size = 0 },
+			.dataSize = size,
+		}
+	};
+
+	debug("Defining NV Index 0x%08x with size %zu...\n", nv_index, size);
+	rc = Esys_NV_DefineSpace(esys_ctx, esys_tr_rh_owner,
+	                         ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+	                         &auth_value, &public_info, &nv_tr);
+	if (!tss_check_error(rc, "Esys_NV_DefineSpace failed"))
+		goto err;
+
+	/* Write to the NV space */
+	nv_buffer.size = size;
+	memcpy(nv_buffer.buffer, data, size);
+
+	debug("Writing to NV Index 0x%08x...\n", nv_index);
+	rc = Esys_NV_Write(esys_ctx, esys_tr_rh_owner, nv_tr,
+	                   ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+	                   &nv_buffer, 0);
+	if (!tss_check_error(rc, "Esys_NV_Write failed")) {
+		Esys_NV_UndefineSpace(esys_ctx, esys_tr_rh_owner, nv_tr,
+				      ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE);
+		goto err;
+	}
+
+	infomsg("Successfully wrote %zu bytes to TPM NV Index 0x%08x\n", size, nv_index);
+	ok = true;
+
+err:
+	if (nv_tr != ESYS_TR_NONE)
+		Esys_TR_Close(esys_ctx, &nv_tr);
+
+	return ok;
 }

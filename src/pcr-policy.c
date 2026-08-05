@@ -41,6 +41,7 @@
 #include "config.h"
 #include "tpm2key.h"
 #include "sd-boot.h"
+#include "oracle.h"
 
 struct target_platform {
 	const char *    name;
@@ -779,8 +780,17 @@ esys_seal_secret(const target_platform_t *platform, ESYS_CONTEXT *esys_context,
 		goto cleanup;
 
 	ok = platform->write_sealed_secret(output_path, persistent_handle, pcr_sel, sealed_private, sealed_public);
-	if (ok)
-		infomsg("Sealed secret written to %s\n", output_path?: "(standard output)");
+	if (ok) {
+		infomsg("Sealed secret written to ");
+		if (opt_nvindex != 0) {
+			if (output_path)
+				infomsg("TPM NV Index 0x%08x and %s\n", opt_nvindex, output_path);
+			else
+				infomsg("TPM NV Index 0x%08x\n", opt_nvindex);
+		} else {
+			infomsg("%s\n", output_path?: "(standard output)");
+		}
+	}
 
 cleanup:
 	if (sealed_private)
@@ -1270,7 +1280,15 @@ pcr_policy_sign(const target_platform_t *platform, const tpm_pcr_bank_t *bank,
 			policy_name, bank, pcr_policy,
 			rsa_key, signed_policy);
 	if (okay) {
-		infomsg("Signed PCR policy written to %s\n", output_path?: "(standard output)");
+		infomsg("Signed PCR policy written to ");
+		if (opt_nvindex != 0) {
+			if (output_path)
+				infomsg("TPM NV Index 0x%08x and %s\n", opt_nvindex, output_path);
+			else
+				infomsg("TPM NV Index 0x%08x\n", opt_nvindex);
+		} else {
+			infomsg("%s\n", output_path?: "(standard output)");
+		}
 		print_pcr_bank(bank);
 	}
 
@@ -1692,7 +1710,11 @@ tpm2key_write_sealed_secret(const char *pathname,
 {
 	TSSPRIVKEY *tpm2key = NULL;
 	TPM2_HANDLE parent;
+	buffer_t *buf = NULL;
 	bool ok = false;
+
+	if (pathname == NULL && opt_nvindex == 0)
+		return false;
 
 	if (persistent_addr == 0)
 		parent = TPM2_RH_OWNER;
@@ -1708,9 +1730,25 @@ tpm2key_write_sealed_secret(const char *pathname,
 	if (pcr_sel && !tpm2key_add_policy_policypcr(tpm2key, pcr_sel))
 		goto cleanup;
 
-	ok = tpm2key_write_file(pathname, tpm2key);
+	buf = tpm2key_serialize(tpm2key);
+	if (buf == NULL) {
+		error("failed to convert tpm2key to buffer_t\n");
+		goto cleanup;
+	}
 
+	if (opt_nvindex != 0) {
+		if (!tpm_nvindex_write(opt_nvindex, buf))
+			goto cleanup;
+	}
+
+	if (pathname) {
+		if (!buffer_write_file(pathname, buf))
+			goto cleanup;
+	}
+
+	ok = true;
 cleanup:
+	buffer_free(buf);
 	if (tpm2key)
 		TSSPRIVKEY_free(tpm2key);
 	return ok;
@@ -1727,7 +1765,11 @@ tpm2key_write_signed_policy(const char *input_path, const char *output_path,
 	TSSPRIVKEY *tpm2key = NULL;
 	TPM2B_PUBLIC *pub_key = NULL;
 	TPML_PCR_SELECTION pcr_sel;
+	buffer_t *buf = NULL;
 	bool okay = false;
+
+	if (output_path == NULL && opt_nvindex == 0)
+		return false;
 
 	if (!policy_name)
 		policy_name = "default";
@@ -1749,9 +1791,25 @@ tpm2key_write_signed_policy(const char *input_path, const char *output_path,
 	if (!tpm2key_add_authpolicy_policyauthorize(tpm2key, policy_name, &pcr_sel, pub_key, signed_policy, false))
 		goto out;
 
-	okay = tpm2key_write_file(output_path, tpm2key);
+	buf = tpm2key_serialize(tpm2key);
+	if (buf == NULL) {
+		error("failed to convert tpm2key to buffer_t\n");
+		goto out;
+	}
 
+	if (opt_nvindex != 0) {
+		if (!tpm_nvindex_write(opt_nvindex, buf))
+			goto out;
+	}
+
+	if (output_path) {
+		if (!buffer_write_file(output_path, buf))
+			goto out;
+	}
+
+	okay = true;
 out:
+	buffer_free(buf);
 	if (pub_key)
 		free(pub_key);
 	if (tpm2key)
