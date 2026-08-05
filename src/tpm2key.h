@@ -21,6 +21,7 @@
 #include <openssl/asn1.h>
 #include <openssl/bio.h>
 #include "tpm2key-asn.h"
+#include "types.h"
 
 bool	tpm2key_basekey(TSSPRIVKEY **tpm2key, const TPM2_HANDLE parent,
 			const TPM2B_PUBLIC *sealed_pub,
@@ -38,6 +39,6 @@ bool	tpm2key_add_authpolicy_policyauthorize(TSSPRIVKEY *tpm2key,
 
 bool	tpm2key_read_file(const char *path, TSSPRIVKEY **tpm2key);
 
-bool	tpm2key_write_file(const char *path, const TSSPRIVKEY *tpm2key);
+buffer_t *tpm2key_serialize(const TSSPRIVKEY *tpm2key);
 
 #endif

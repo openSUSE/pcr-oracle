@@ -24,6 +24,7 @@
 
 #include <stdbool.h>
 #include <tss2_esys.h>
+#include "types.h"
 
 extern uint32_t		esys_tr_rh_null;
 extern uint32_t		esys_tr_rh_owner;
@@ -36,6 +37,7 @@ extern void		tss_print_error(int rc, const char *msg);
 
 extern TPM2B_PUBLIC *	tss_read_public_key(const char *);
 extern bool		tss_write_public_key(const char *, const TPM2B_PUBLIC *);
+extern bool		tpm_nvindex_write(uint32_t nv_index, const buffer_t *bp);
 
 static inline bool
 tss_check_error(int rc, const char *msg)

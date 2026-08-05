@@ -233,27 +233,29 @@ error:
 	return false;
 }
 
-bool
-tpm2key_write_file(const char *path, TSSPRIVKEY *tpm2key)
+buffer_t *
+tpm2key_serialize(const TSSPRIVKEY *tpm2key)
 {
-	buffer_t write_buf;
-	unsigned char *der_buf = NULL;
 	int der_size;
-	bool ok = false;
+	unsigned char *der_buf = NULL;
+	buffer_t *bp = NULL;
 
 	der_size = i2d_TSSPRIVKEY(tpm2key, &der_buf);
 	if (der_size < 0) {
 		error("Failed to encode the key\n");
-		return false;
+		return NULL;
 	}
 
-	buffer_init_write(&write_buf, der_buf, der_size);
-	write_buf.wpos = der_size;
-	ok = buffer_write_file(path, &write_buf);
+	bp = buffer_alloc_write(der_size);
+	if (bp) {
+		memcpy(bp->data, der_buf, der_size);
+		bp->wpos = der_size;
+	} else {
+		error("Failed to allocate buffer\n");
+	}
 
 	free(der_buf);
-
-	return ok;
+	return bp;
 }
 
 /* Implement the TPM 2.0 Key File structures */
