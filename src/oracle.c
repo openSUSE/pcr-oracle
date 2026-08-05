@@ -24,6 +24,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <limits.h>
+#include <errno.h>
 
 #include "oracle.h"
 #include "util.h"
@@ -111,6 +112,7 @@ enum {
 	OPT_COMPARE_CURRENT,
 	OPT_PERSISTENT_SRK,
 	OPT_DISABLE_SYNTHESIS,
+	OPT_NVINDEX,
 };
 
 static struct option options[] = {
@@ -148,11 +150,13 @@ static struct option options[] = {
 	{ "compare-current",	no_argument,		0,	OPT_COMPARE_CURRENT },
 	{ "persistent-srk",	required_argument,	0,	OPT_PERSISTENT_SRK },
 	{ "disable-synthesis",	no_argument,		0,	OPT_DISABLE_SYNTHESIS },
+	{ "nvindex",		required_argument,	0,	OPT_NVINDEX },
 
 	{ NULL }
 };
 
 unsigned int opt_debug	= 0;
+uint32_t opt_nvindex	= 0;
 
 static void	predictor_report_plain(struct predictor *pred, unsigned int pcr_index);
 static void	predictor_report_tpm2_tools(struct predictor *pred, unsigned int pcr_index);
@@ -208,6 +212,7 @@ usage(int exitval, const char *msg)
 		"  --ecc-srk              Use Elliptic Curve Cryptography (ECC P-256) instead of RSA for SRK.\n"
 		"  --persistent-srk HANDLE/INDEX\n"
 		"                         Set a persistent SRK handle/index.\n"
+		"  -n, --nvindex HANDLE   Specify TPM NV Index to write or unseal a key in tpm2.0 format.\n"
 		"  --input PATH           Specify input secret file or sealed secret path.\n"
 		"  --output PATH          Specify output path for sealing, unsealing, or public keys.\n"
 		"  --policy-name NAME     Specify an extra Name field for authorized policies (tpm2.0 format).\n"
@@ -1240,11 +1245,13 @@ main(int argc, char **argv)
 	const target_platform_t *target;
 	unsigned int action_flags = 0;
 	unsigned int rsa_bits = 2048;
+	unsigned long val;
+	char *endptr;
 	int c, exit_code = 0;
 
 	set_srk_alg("RSA");
 
-	while ((c = getopt_long(argc, argv, "dhA:CF:LSZ", options, NULL)) != EOF) {
+	while ((c = getopt_long(argc, argv, "dhA:CF:LSZn:", options, NULL)) != EOF) {
 		switch (c) {
 		case 'A':
 			opt_algo = optarg;
@@ -1346,6 +1353,16 @@ main(int argc, char **argv)
 		case OPT_DISABLE_SYNTHESIS:
 			opt_disable_synthesis = true;
 			break;
+		case 'n':
+		case OPT_NVINDEX:
+			errno = 0;
+			val = strtoul(optarg, &endptr, 0);
+			if (errno || *endptr != '\0' || val > 0xFFFFFFFFUL)
+				fatal("Invalid NV Index handle: %s\n", optarg);
+			opt_nvindex = (uint32_t)val;
+			if ((opt_nvindex >> 24) != 0x01)
+				fatal("Not a valid NV Index handle (must start with 0x01, e.g., 0x01000001)\n");
+			break;
 		case 'h':
 			usage(0, NULL);
 		default:
@@ -1384,6 +1401,9 @@ main(int argc, char **argv)
 		opt_target_platform = "tpm2.0";
 	if ((target = pcr_get_target_platform(opt_target_platform)) == NULL)
 		fatal("Unsupported target platform %s\n", opt_target_platform);
+
+	if (opt_nvindex != 0 && strcmp(opt_target_platform, "tpm2.0") != 0)
+		fatal("NV Index is only supported with the tpm2.0 target platform\n");
 
 	/* Validate options */
 	/* ACTION_PREDICT, ACTION_SEAL, and ACTION_SIGN may need to extend the
@@ -1429,8 +1449,8 @@ main(int argc, char **argv)
 				usage(1, "You need to specify the --pcr-policy option when unsealing using an authorized policy\n");
 		}
 
-		if ((action_flags & PLATFORM_NEED_INPUT_FILE) && !opt_input)
-			usage(1, "You need to specify an input file via --input when unsealing a secret\n");
+		if ((action_flags & PLATFORM_NEED_INPUT_FILE) && !opt_input && opt_nvindex == 0)
+			usage(1, "You need to specify an input file via --input or an NV index via --nvindex when unsealing a secret\n");
 		if ((action_flags & PLATFORM_NEED_OUTPUT_FILE) && !opt_output)
 			usage(1, "You need to specify an output file via --output when unsealing a secret\n");
 		if (action_flags & PLATFORM_NEED_PCR_SELECTION)
@@ -1441,8 +1461,8 @@ main(int argc, char **argv)
 	case ACTION_SIGN:
 		if (opt_rsa_private_key == NULL)
 			usage(1, "You need to specify the --private-key option when signing a policy\n");
-		if (opt_output == NULL)
-			usage(1, "You need to specify the --output option when signing a policy\n");
+		if (opt_output == NULL && opt_nvindex == 0)
+			usage(1, "You need to specify the --output option or the --nvindex option when signing a policy\n");
 
 		pcr_selection = get_pcr_selection_argument(argc, argv, opt_algo);
 		break;
