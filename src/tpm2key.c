@@ -20,6 +20,7 @@
 #include <tss2_mu.h>
 
 #include "bufparser.h"
+#include "tpm2key.h"
 #include "tpm2key-asn.h"
 #include "util.h"
 
@@ -191,22 +192,34 @@ cleanup:
 bool
 tpm2key_read_file(const char *path, TSSPRIVKEY **tpm2key)
 {
-	TSSPRIVKEY *key = NULL;
 	buffer_t *bp;
-	const uint8_t *ptr;
-	char oid[128];
+	bool ok;
 
 	if (!(bp = buffer_read_file(path, 0)))
 		return false;
 
-	ptr = bp->data;
-	d2i_TSSPRIVKEY(&key, &ptr, bp->size);
+	ok = tpm2key_read_buffer(bp, tpm2key, path);
+	buffer_free(bp);
+
+	return ok;
+}
+
+bool
+tpm2key_read_buffer(const buffer_t *bp, TSSPRIVKEY **tpm2key, const char *path)
+{
+	TSSPRIVKEY *key = NULL;
+	const uint8_t *ptr;
+	char oid[128];
+
+	if (!bp)
+		return false;
+
+	ptr = buffer_read_pointer(bp);
+	d2i_TSSPRIVKEY(&key, &ptr, buffer_available(bp));
 	if (key == NULL) {
-		error("%s does not seem to contain a valid TPM 2.0 Key\n", path);
+		error("%s does not seem to contain a valid TPM 2.0 Key\n", path ? path : "Buffer");
 		return false;
 	}
-
-	buffer_free(bp);
 
 	/* check the content of the key */
 	if (OBJ_obj2txt(oid, sizeof(oid), key->type, 1) == 0) {
@@ -215,7 +228,7 @@ tpm2key_read_file(const char *path, TSSPRIVKEY **tpm2key)
 	}
 
 	if (strcmp(OID_sealedData, oid) != 0) {
-		error("%s is not a sealed key in TPM 2.0 Key Format\n", path);
+		error("%s is not a sealed key in TPM 2.0 Key Format\n", path ? path : "Buffer");
 		goto error;
 	}
 

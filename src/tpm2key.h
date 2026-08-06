@@ -38,6 +38,7 @@ bool	tpm2key_add_authpolicy_policyauthorize(TSSPRIVKEY *tpm2key,
 			bool append);
 
 bool	tpm2key_read_file(const char *path, TSSPRIVKEY **tpm2key);
+bool	tpm2key_read_buffer(const buffer_t *bp, TSSPRIVKEY **tpm2key, const char *path);
 
 buffer_t *tpm2key_serialize(const TSSPRIVKEY *tpm2key);
 
