@@ -459,3 +459,72 @@ err:
 
 	return ok;
 }
+
+bool
+tpm_nvindex_read(uint32_t nv_index, buffer_t **bp)
+{
+	ESYS_CONTEXT *esys_ctx = tss_esys_context();
+	ESYS_TR nv_tr = ESYS_TR_NONE;
+	TSS2_RC rc;
+	TPM2B_NV_PUBLIC *public_info = NULL;
+	TPM2B_MAX_NV_BUFFER *nv_buffer = NULL;
+	uint16_t data_size = 0;
+	buffer_t *out_bp = NULL;
+	bool okay = false;
+
+	if (!bp) {
+		error("tpm_nvindex_read: bp is NULL\n");
+		return false;
+	}
+
+	/* Try to see if NV index is defined */
+	if (!tpm_nvindex_exists(nv_index)) {
+		error("TPM NV Index 0x%08x is not defined\n", nv_index);
+		return false;
+	}
+
+	rc = Esys_TR_FromTPMPublic(esys_ctx, nv_index,
+	                           ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+	                           &nv_tr);
+	if (rc != TSS2_RC_SUCCESS) {
+		error("Failed to load TPM NV Index 0x%08x\n", nv_index);
+		return false;
+	}
+
+	/* Read NV public space to get dataSize */
+	rc = Esys_NV_ReadPublic(esys_ctx, nv_tr,
+	                        ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+	                        &public_info, NULL);
+	if (!tss_check_error(rc, "Esys_NV_ReadPublic failed"))
+		goto cleanup;
+
+	data_size = public_info->nvPublic.dataSize;
+	debug("NV Index 0x%08x has data size %u\n", nv_index, data_size);
+
+	/* Read from NV index */
+	rc = Esys_NV_Read(esys_ctx, esys_tr_rh_owner, nv_tr,
+	                  ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+	                  data_size, 0, &nv_buffer);
+	if (!tss_check_error(rc, "Esys_NV_Read failed"))
+		goto cleanup;
+
+	out_bp = buffer_alloc_write(nv_buffer->size);
+	if (!out_bp) {
+		error("tpm_nvindex_read: failed to allocate memory buffer\n");
+		goto cleanup;
+	}
+
+	buffer_put(out_bp, nv_buffer->buffer, nv_buffer->size);
+	*bp = out_bp;
+	okay = true;
+
+cleanup:
+	if (public_info)
+		free(public_info);
+	if (nv_buffer)
+		free(nv_buffer);
+	if (nv_tr != ESYS_TR_NONE)
+		Esys_TR_Close(esys_ctx, &nv_tr);
+
+	return okay;
+}

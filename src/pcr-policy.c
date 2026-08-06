@@ -1565,11 +1565,24 @@ tpm2key_unseal_secret(const char *input_path, const char *output_path,
 	ESYS_TR primary_handle = ESYS_TR_NONE;
 	ESYS_TR sealed_object_handle = ESYS_TR_NONE;
 	TPM2B_SENSITIVE_DATA *unsealed = NULL;
+	buffer_t *bp = NULL;
+	const char *buf_path = NULL;
 	TPM2_RC rc;
 	bool okay = false;
 
-	if (!tpm2key_read_file(input_path, &tpm2key))
+	if (opt_nvindex != 0) {
+		if (!tpm_nvindex_read(opt_nvindex, &bp))
+			return false;
+	} else {
+		if (!(bp = buffer_read_file(input_path, 0)))
+			return false;
+		buf_path = input_path;
+	}
+
+	if (!tpm2key_read_buffer(bp, &tpm2key, buf_path)) {
+		buffer_free(bp);
 		return false;
+	}
 
 	if (tpm2key->rsaParent == 1)
 		SRK_template = &RSA_SRK_template;
@@ -1630,6 +1643,8 @@ tpm2key_unseal_secret(const char *input_path, const char *output_path,
 	}
 
 cleanup:
+	buffer_free(bp);
+
 	if (tpm2key)
 		TSSPRIVKEY_free(tpm2key);
 	if (unsealed)
