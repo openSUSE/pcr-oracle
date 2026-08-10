@@ -354,6 +354,49 @@ To sign the policy against PCR 0,2,4,7 for sealed-auth.tpm:
 .fi
 .P
 .\" ##################################################################
+.\" # TPM NV Index
+.\" ##################################################################
+.SS Sealing and Unsealing using a TPM NV Index
+By storing a sealed key directly inside a TPM Non-Volatile (NV) index, bootloaders (such as GRUB) can unseal keys without having to read any key file from disk.
+.P
+The following command seals a secret against PCR 0,2,4,7 and writes the resulting key container directly into the TPM NV Index \fB0x01800001\fP:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=tpm2.0 \\
+	--nvindex 0x01800001 \\
+	--input secret \\
+	seal-secret 0,2,4,7
+.fi
+.P
+To unseal the secret directly from the TPM NV Index without specifying any input key file:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=tpm2.0 \\
+	--nvindex 0x01800001 \\
+	--output recovered \\
+	unseal-secret
+.fi
+.P
+It is also possible to update an existing key container with a signed policy and write the resulting container directly to a TPM NV Index. When doing so, the output file on disk is optional, as the key container is stored directly in the NV Index.
+.P
+For example, to sign a PCR policy for \fBsealed-auth.tpm\fP and write the updated container to the TPM NV Index \fB0x01800001\fP without generating/updating a disk file:
+.P
+.nf
+.in +2
+# pcr-oracle \\
+	--target-platform=tpm2.0 \\
+	--policy-name "authorized-policy-test" \\
+	--private-key policy-key.pem \\
+	--input sealed-auth.tpm \\
+	--nvindex 0x01800001 \\
+	sign 0,2,4,7
+.fi
+.P
+.\" ##################################################################
 .\" # Systemd Policy
 .\" ##################################################################
 .SS Generating a Signed Policy for Systemd
@@ -578,6 +621,9 @@ Switch the storage root key (SRK) configuration to Elliptic Curve Cryptography
 .TP
 .BI --persistent-srk " handle/index
 Configure a persistent storage root key (SRK) handle or index on the TPM.
+.TP
+.BR -n ", " --nvindex " \fIhandle\fP"
+Specify the TPM NV Index handle (which must start with \fB0x01\fP in the MSB, e.g., \fB0x01800001\fP) to write, sign, or unseal a key container. This option is currently only supported when using the \fBtpm2.0\fP target platform. When sealing or signing a policy, the resulting key container is stored directly in the specified NV space (even if no disk-based output file is specified). When unsealing, the key container is read directly from the specified NV space, bypassing the need for a disk-based input file.
 .TP
 .BI --tpm-eventlog " path
 By default, the tool will read the current TPM event log. It is possible
