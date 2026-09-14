@@ -3,5 +3,7 @@
 src/config.h
 Makefile
 pcr-oracle
+tpm2key-tool
 man/pcr-oracle.8
+man/tpm2key-tool.8
 LOG

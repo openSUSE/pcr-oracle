@@ -8,11 +8,11 @@ TSS2_LINK	= -ltss2-esys -ltss2-tctildr -ltss2-rc -ltss2-mu -lcrypto
 JSON_LINK	= -L@JSON_LIBDIR@ @JSON_LIBS@
 FDISK_LINK	= @FDISK_LIBS@
 LIBELF_LINK	= @LIBELF_LIBS@
-TOOLS		= pcr-oracle
+TOOLS		= pcr-oracle tpm2key-tool
 
 MANDIR		= @MANDIR@
 MAN8DIR		= $(MANDIR)/man8
-MANPAGES	= man/pcr-oracle.8
+MANPAGES	= man/pcr-oracle.8 man/tpm2key-tool.8
 
 ORACLE_SRCS	= oracle.c \
 		  pcr.c \
@@ -58,6 +58,12 @@ clean:
 
 pcr-oracle: $(ORACLE_OBJS)
 	$(CC) -o $@ $(ORACLE_OBJS) $(TSS2_LINK) $(JSON_LINK) $(FDISK_LINK) $(LIBELF_LINK)
+
+TPM2KEY_SRCS    = tpm2key-tool.c tpm2key.c bufparser.c util.c
+TPM2KEY_OBJS    = $(addprefix build/,$(patsubst %.c,%.o,$(TPM2KEY_SRCS)))
+
+tpm2key-tool: $(TPM2KEY_OBJS)
+	$(CC) -o $@ $(TPM2KEY_OBJS) -ltss2-mu -lcrypto
 
 build/%.o: src/%.c
 	@mkdir -p build
