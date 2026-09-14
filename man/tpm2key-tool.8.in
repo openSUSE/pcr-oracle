@@ -1,0 +1,75 @@
+.\" Process this file with
+.\" groff -man -Tascii $FILENAME
+.\"
+.\"
+.TH TPM2KEY-TOOL "8" "@DATE@" "@PCR_ORACLE_VERSION@" "Parse and Compare TPM 2.0 Keys"
+.SH NAME
+tpm2key-tool \- parse and compare TPM 2.0 key files
+.SH SYNOPSIS
+.B tpm2key-tool
+.RB [ \-d | \-\-debug ]
+.B parse
+.I key-file
+.P
+.B tpm2key-tool
+.RB [ \-d | \-\-debug ]
+.B cmp
+.I key-file-1
+.I key-file-2
+.P
+.B tpm2key-tool
+.RB [ \-h | \-\-help ]
+.SH DESCRIPTION
+.B tpm2key-tool
+is a command-line utility designed to parse, inspect, and compare
+TPM 2.0 private key files. These files are typically stored in the standard
+ASN.1 DER-encoded format defined by the TPM2.0 key file specification (TSS
+PrivKey).
+.SH OPTIONS
+The following options are recognized by
+.B tpm2key-tool\fR:
+.TP
+.BR \-d ", " \-\-debug
+Enable verbose debug logging.
+.TP
+.BR \-h ", " \-\-help
+Display a help message and exit.
+.SH SUBCOMMANDS
+.TP
+.BI parse " key-file"
+Decodes and prints a detailed, human-readable summary of the specified
+TPM 2.0 key file. This includes structural elements such as:
+.RS
+.IP \(bu 2
+The TSSPrivKey type (OID)
+.IP \(bu 2
+The key's description (if present)
+.IP \(bu 2
+The parent handle and public key
+.IP \(bu 2
+Any option or authorization policies (including policy steps and command codes)
+.RE
+.TP
+.BI cmp " key-file-1 key-file-2"
+Compares two TPM 2.0 key files to determine if they share the same base key. This
+is particularly useful for verifying if two keys were derived or wrapped under
+the same parent or if they represent the same underlying TPM object with different
+policies.
+.SH EXIT STATUS
+The utility returns the following exit status codes:
+.TP
+.B 0
+Success, and for the
+.B cmp
+subcommand, both key files represent or share the same base key.
+.TP
+.B 1
+Returned by the
+.B cmp
+subcommand only: the keys are valid but do not share the same base key.
+.TP
+.B 2
+An error occurred, such as invalid usage, or a specified key file could not be
+read, parsed, or decoded.
+.SH SEE ALSO
+.BR pcr-oracle (8)
