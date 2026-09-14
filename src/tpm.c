@@ -147,61 +147,6 @@ out:
 	return okay;
 }
 
-#ifdef TPM2_CAP_AUTH_POLICIES
-static bool
-tpm_get_auth_policies(TPM2_HANDLE hierarchy, TPMS_CAPABILITY_DATA **cap_data)
-{
-	ESYS_CONTEXT *esys_ctx = tss_esys_context();
-	TPMI_YES_NO more_data;
-	TSS2_RC rc;
-
-	rc = Esys_GetCapability(esys_ctx, ESYS_TR_NONE, ESYS_TR_NONE,
-			ESYS_TR_NONE, TPM2_CAP_AUTH_POLICIES, hierarchy,
-			TPM2_MAX_TAGGED_POLICIES, &more_data, cap_data);
-	if (rc != TSS2_RC_SUCCESS)
-		return tss_check_error(rc, "Esys_GetCapability (AUTH_POLICIES) failed");
-
-	if (*cap_data == NULL) {
-		error("Empty CAP data (AUTH_POLICIES)\n");
-		return false;
-	}
-
-	if ((*cap_data)->capability != TPM2_CAP_AUTH_POLICIES) {
-		error("Wrong CAP data (AUTH_POLICIES)\n");
-		return false;
-	}
-
-	return true;
-}
-
-static bool
-tpm_check_auth_policies(TPM2_HANDLE hierarchy)
-{
-	TPMS_CAPABILITY_DATA *cap_data = NULL;
-	TPML_TAGGED_POLICY *policies = NULL;
-	uint32_t i;
-	bool okay = false;
-
-	if (!tpm_get_auth_policies(hierarchy, &cap_data))
-		goto out;
-
-	policies = &cap_data->data.authPolicies;
-	for (i = 0; i < policies->count; i++) {
-		if (policies->policies[i].policyHash.hashAlg != TPM2_ALG_NULL) {
-			error("Tagged policy NON-NULL Hash Algorithm\n");
-			goto out;
-		}
-	}
-
-	okay = true;
-out:
-	if (cap_data)
-		free(cap_data);
-
-	return okay;
-}
-#endif
-
 static bool
 tpm_check_capabilities(void)
 {
@@ -228,17 +173,6 @@ tpm_check_capabilities(void)
 		error("TPM2 Owner Authorization set\n");
 		return false;
 	}
-
-#ifdef TPM2_CAP_AUTH_POLICIES
-	/*
-	 * Ensure that there is no authorization policy associated with the
-	 * TPM2_RH_OWNER hierarchy.
-	 */
-	if (!tpm_check_auth_policies(TPM2_RH_OWNER)) {
-		error("Error from Owner handle\n");
-		return false;
-	}
-#endif
 
 	return true;
 }
