@@ -204,6 +204,18 @@ tpm2key_read_file(const char *path, TSSPRIVKEY **tpm2key)
 	return ok;
 }
 
+/* Only DER is supported, grub2 cannot read the PEM envelope */
+static bool
+tpm2key_is_pem(const buffer_t *bp)
+{
+	static const char guard[] = "-----BEGIN " TSSPRIVKEY_PEM_STRING "-----";
+
+	if (buffer_available(bp) < sizeof(guard) - 1)
+		return false;
+
+	return memcmp(buffer_read_pointer(bp), guard, sizeof(guard) - 1) == 0;
+}
+
 bool
 tpm2key_read_buffer(const buffer_t *bp, TSSPRIVKEY **tpm2key, const char *path)
 {
@@ -216,8 +228,15 @@ tpm2key_read_buffer(const buffer_t *bp, TSSPRIVKEY **tpm2key, const char *path)
 
 	ptr = buffer_read_pointer(bp);
 	d2i_TSSPRIVKEY(&key, &ptr, buffer_available(bp));
+
 	if (key == NULL) {
-		error("%s does not seem to contain a valid TPM 2.0 Key\n", path ? path : "Buffer");
+		if (tpm2key_is_pem(bp)) {
+			error("%s is PEM encoded, only the DER encoding is supported\n",
+			      path ? path : "Buffer");
+		} else {
+			error("%s does not seem to contain a valid TPM 2.0 Key\n",
+			      path ? path : "Buffer");
+		}
 		return false;
 	}
 
