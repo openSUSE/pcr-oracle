@@ -124,7 +124,6 @@ extern const char *	print_pcr_mask(unsigned int mask);
 extern bool		parse_hexdigit(const char **pos, unsigned char *ret);
 extern bool		parse_octet(const char **pos, unsigned char *ret);
 extern unsigned int	parse_octet_string(const char *string, unsigned char *buffer, size_t bufsz);
-extern const tpm_evdigest_t *parse_digest(const char *string, const char *algo);
 
 extern void		hexdump(const void *data, size_t size, void (*)(const char *, ...), unsigned int indent);
 extern const char *	print_octet_string(const unsigned char *data, unsigned int len);

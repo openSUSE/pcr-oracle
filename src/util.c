@@ -254,28 +254,6 @@ print_base64_value(const unsigned char *data, unsigned int len)
 	return buffer;
 }
 
-const tpm_evdigest_t *
-parse_digest(const char *string, const char *algo)
-{
-	static const tpm_algo_info_t *algo_info;
-	static tpm_evdigest_t md;
-
-	if (!(algo_info = digest_by_name(algo)))
-		fatal("%s: unknown digest name \"%s\"\n", __func__, algo);
-
-	memset(&md, 0, sizeof(md));
-	md.algo = algo_info;
-
-	md.size = parse_octet_string(string, md.data, sizeof(md.data));
-	if (md.size != algo_info->digest_size) {
-		debug("Cannot parse %s digest \"%s\" - wrong size %u; expected %u\n",
-				algo, string, md.size, algo_info->digest_size);
-		return NULL;
-	}
-
-	return &md;
-}
-
 void
 hexdump(const void *data, size_t size, void (*print_fn)(const char *, ...), unsigned int indent)
 {
