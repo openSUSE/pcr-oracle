@@ -71,7 +71,7 @@ typedef struct {
 	STACK_OF(TSSOPTPOLICY) *policy;
 	ASN1_OCTET_STRING *secret;
 	STACK_OF(TSSAUTHPOLICY) *authPolicy;
-	ASN1_UTF8STRING description;
+	ASN1_UTF8STRING *description;
 	ASN1_BOOLEAN rsaParent;
 	ASN1_INTEGER *parent;
 	ASN1_OCTET_STRING *pubkey;
