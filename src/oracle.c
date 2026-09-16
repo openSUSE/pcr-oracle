@@ -49,6 +49,7 @@ enum {
 	ACTION_SELFTEST,
 	ACTION_RSATEST,
 	ACTION_ECCTEST,
+	ACTION_LOADTEST,
 };
 
 enum {
@@ -1170,6 +1171,7 @@ get_action_argument(int argc, char **argv)
 		{ "self-test",			ACTION_SELFTEST	},
 		{ "rsa-test",			ACTION_RSATEST	},
 		{ "ecc-test",			ACTION_ECCTEST	},
+		{ "load-test",			ACTION_LOADTEST	},
 
 		{ NULL, 0 },
 	};
@@ -1236,6 +1238,7 @@ main(int argc, char **argv)
 	stored_key_t *opt_rsa_public_key = NULL;
 	bool opt_rsa_generate = false;
 	char *opt_rsa_bits = NULL;
+	bool opt_ecc_srk = false;
 	char *opt_policy_name = NULL;
 	char *opt_target_platform = NULL;
 	char *opt_boot_entry = NULL;
@@ -1316,6 +1319,7 @@ main(int argc, char **argv)
 			opt_rsa_bits = optarg;
 			break;
 		case OPT_ECC_SRK:
+			opt_ecc_srk = true;
 			set_srk_alg("ECC");
 			break;
 		case OPT_INPUT:
@@ -1479,6 +1483,12 @@ main(int argc, char **argv)
 		end_arguments(argc, argv);
 		break;
 
+	case ACTION_LOADTEST:
+		if (opt_input == NULL && opt_nvindex == 0)
+			usage(1, "You need to specify the --input option or the --nvindex option when testing a sealed key\n");
+		end_arguments(argc, argv);
+		break;
+
 	default:
 		fatal("Action %u not implemented\n", action);
 	}
@@ -1520,6 +1530,23 @@ main(int argc, char **argv)
 	}
 
 	set_srk_rsa_bits (rsa_bits);
+
+	if (action == ACTION_LOADTEST) {
+		const char *srk_alg;
+
+		/* Without an explicit SRK selection, walk all the candidates
+		 * and report the one the TPM accepts. */
+		srk_alg = pcr_srk_load_test(opt_input, !opt_ecc_srk && opt_rsa_bits == NULL);
+		if (srk_alg == NULL) {
+			infomsg("The sealed key cannot be loaded under any known SRK\n");
+			return 1;
+		}
+
+		/* The bare algorithm name goes to stdout, so that callers can
+		 * feed it straight into GRUB_TPM2_SRK_ALG. */
+		printf("%s\n", srk_alg);
+		return 0;
+	}
 
 	if (action == ACTION_SELFTEST) {
 		if (!tpm_selftest(true))

@@ -79,6 +79,7 @@ extern bool		pcr_unseal_secret(const target_platform_t *,
 				const char *input_path, const char *output_path);
 extern bool		pcr_policy_unseal_tpm2key(const char *input_path,
 				const char *output_path);
+extern const char *	pcr_srk_load_test(const char *input_path, bool probe_all);
 
 extern const target_platform_t *pcr_get_target_platform(const char *name);
 
