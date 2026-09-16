@@ -1672,6 +1672,241 @@ pcr_unseal_secret(const target_platform_t *platform,
 }
 
 /*
+ * Find out which SRK a sealed key was created under.
+ *
+ * The parent of a sealed object is fixed when the key is sealed, and the key
+ * file barely records it: the tpm2key format only carries the rsaParent
+ * boolean, which distinguishes RSA from ECC but not the RSA key size, and the
+ * oldgrub format carries nothing at all. The only reliable answer comes from
+ * the TPM itself, because TPM2_Load only succeeds under the actual parent.
+ */
+static const struct srk_candidate {
+	const char *		name;
+	const char *		alg;
+	unsigned int		rsa_bits;
+} srk_candidates[] = {
+	/* Cheapest first: creating an RSA SRK costs orders of magnitude more
+	 * time than an ECC one, and the bigger the RSA key, the worse. */
+	{ "ECC",	"ECC",	0	},
+	{ "RSA2048",	"RSA",	2048	},
+	{ "RSA3072",	"RSA",	3072	},
+	{ "RSA4096",	"RSA",	4096	},
+
+	{ NULL,		NULL,	0	},
+};
+
+/* Render a public area as the SRK algorithm name grub2 uses. */
+static const char *
+__srk_public_name(const TPMT_PUBLIC *pub)
+{
+	static char name_buf[16];
+
+	if (pub->type == TPM2_ALG_ECC)
+		return "ECC";
+
+	if (pub->type == TPM2_ALG_RSA) {
+		snprintf(name_buf, sizeof(name_buf), "RSA%u",
+				pub->parameters.rsaDetail.keyBits);
+		return name_buf;
+	}
+
+	return "unknown";
+}
+
+/* Try to load the sealed object under the SRK currently selected by
+ * SRK_template, or under the persistent SRK the key points at. */
+static bool
+__srk_try_load(ESYS_CONTEXT *esys_context, TPM2_HANDLE parent,
+			const TPM2B_PUBLIC *pub, const TPM2B_PRIVATE *priv)
+{
+	bool parent_is_persistent = (parent >> TPM2_HR_SHIFT) == TPM2_HT_PERSISTENT;
+	ESYS_TR primary_handle = ESYS_TR_NONE;
+	ESYS_TR sealed_object_handle = ESYS_TR_NONE;
+	TPM2_RC rc;
+	bool okay = false;
+
+	if (parent_is_persistent) {
+		rc = Esys_TR_FromTPMPublic(esys_context, parent,
+				ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+				&primary_handle);
+		if (!tss_check_error(rc, "Esys_TR_FromTPMPublic failed"))
+			return false;
+	} else if (!esys_create_primary(esys_context, &primary_handle))
+		return false;
+
+	/* Loading under the wrong parent is the expected outcome while
+	 * probing, so this failure is not reported as an error. */
+	rc = Esys_Load(esys_context, primary_handle,
+			ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+			priv, pub, &sealed_object_handle);
+	if (rc == TSS2_RC_SUCCESS)
+		okay = true;
+	else
+		debug("Esys_Load failed: %s\n", Tss2_RC_Decode(rc));
+
+	esys_flush_context(esys_context, &sealed_object_handle);
+
+	/* A persistent object must not be flushed, just drop our reference. */
+	if (parent_is_persistent)
+		Esys_TR_Close(esys_context, &primary_handle);
+	else
+		esys_flush_context(esys_context, &primary_handle);
+
+	return okay;
+}
+
+/* Read a sealed key, in either the tpm2key or the oldgrub format. */
+static bool
+__srk_read_sealed_key(const char *input_path, TPM2B_PUBLIC *pub, TPM2B_PRIVATE *priv,
+			TPM2_HANDLE *parent_ret, bool *rsa_parent_ret)
+{
+	const char *what = input_path ? input_path : "The NV index";
+	TSSPRIVKEY *tpm2key = NULL;
+	buffer_t *bp = NULL;
+	buffer_t buf;
+	const uint8_t *blob;
+	TPM2_RC rc;
+	bool okay = false;
+
+	if (opt_nvindex != 0) {
+		if (!tpm_nvindex_read(opt_nvindex, &bp))
+			return false;
+	} else if (!(bp = buffer_read_file(input_path, 0)))
+		return false;
+
+	*parent_ret = TPM2_RH_OWNER;
+	*rsa_parent_ret = false;
+
+	/* A tpm2key file is DER, hence it starts with an ASN.1 SEQUENCE tag.
+	 * Anything else is the bare TPM2B_PUBLIC||TPM2B_PRIVATE concatenation
+	 * written for the oldgrub platform. */
+	if (buffer_available(bp) == 0) {
+		error("%s is empty\n", what);
+		goto cleanup;
+	}
+
+	blob = buffer_read_pointer(bp);
+	if (blob[0] == 0x30) {
+		if (!tpm2key_read_buffer(bp, &tpm2key, input_path))
+			goto cleanup;
+
+		*parent_ret = ASN1_INTEGER_get(tpm2key->parent);
+		*rsa_parent_ret = (tpm2key->rsaParent == 1);
+
+		buffer_init_read(&buf, tpm2key->pubkey->data, tpm2key->pubkey->length);
+		rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(buf.data, buf.size, &buf.rpos, pub);
+		if (!tss_check_error(rc, "Tss2_MU_TPM2B_PUBLIC_Unmarshal failed"))
+			goto cleanup;
+
+		buffer_init_read(&buf, tpm2key->privkey->data, tpm2key->privkey->length);
+		rc = Tss2_MU_TPM2B_PRIVATE_Unmarshal(buf.data, buf.size, &buf.rpos, priv);
+		if (!tss_check_error(rc, "Tss2_MU_TPM2B_PRIVATE_Unmarshal failed"))
+			goto cleanup;
+	} else {
+		rc = Tss2_MU_TPM2B_PUBLIC_Unmarshal(bp->data, bp->size, &bp->rpos, pub);
+		if (rc == TSS2_RC_SUCCESS)
+			rc = Tss2_MU_TPM2B_PRIVATE_Unmarshal(bp->data, bp->size, &bp->rpos, priv);
+		if (!tss_check_error(rc, "Tss2_MU_TPM2B_*_Unmarshal failed")) {
+			error("%s does not seem to contain a sealed key\n", what);
+			goto cleanup;
+		}
+	}
+
+	okay = true;
+
+cleanup:
+	if (tpm2key)
+		TSSPRIVKEY_free(tpm2key);
+	buffer_free(bp);
+	return okay;
+}
+
+/* Report the SRK the given sealed key can be loaded under, or NULL if none
+ * of the candidates works. When probe_all is false, only the SRK selected on
+ * the command line is tried. */
+const char *
+pcr_srk_load_test(const char *input_path, bool probe_all)
+{
+	ESYS_CONTEXT *esys_context = tss_esys_context();
+	const TPM2B_PUBLIC *saved_template;
+	unsigned int saved_rsa_bits;
+	TPM2B_PUBLIC pub = { 0 };
+	TPM2B_PRIVATE priv = { 0 };
+	TPM2_HANDLE parent;
+	bool rsa_parent;
+	const char *match = NULL;
+	unsigned int i;
+
+	saved_template = SRK_template;
+	saved_rsa_bits = RSA_SRK_template.publicArea.parameters.rsaDetail.keyBits;
+
+	if (!__srk_read_sealed_key(input_path, &pub, &priv, &parent, &rsa_parent))
+		return NULL;
+
+	/* When the key names a persistent SRK, there is nothing to probe:
+	 * the key exists in the TPM already and we can just read it. */
+	if ((parent >> TPM2_HR_SHIFT) == TPM2_HT_PERSISTENT) {
+		TPM2B_PUBLIC *srk_public = NULL;
+		ESYS_TR srk_handle = ESYS_TR_NONE;
+		TPM2_RC rc;
+
+		infomsg("Key refers to the persistent SRK in 0x%08x\n", parent);
+
+		rc = Esys_TR_FromTPMPublic(esys_context, parent,
+				ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+				&srk_handle);
+		if (!tss_check_error(rc, "Esys_TR_FromTPMPublic failed"))
+			return NULL;
+
+		rc = Esys_ReadPublic(esys_context, srk_handle,
+				ESYS_TR_NONE, ESYS_TR_NONE, ESYS_TR_NONE,
+				&srk_public, NULL, NULL);
+		Esys_TR_Close(esys_context, &srk_handle);
+		if (!tss_check_error(rc, "Esys_ReadPublic failed"))
+			return NULL;
+
+		if (__srk_try_load(esys_context, parent, &pub, &priv))
+			match = __srk_public_name(&srk_public->publicArea);
+
+		free(srk_public);
+		return match;
+	}
+
+	if (!probe_all) {
+		if (__srk_try_load(esys_context, parent, &pub, &priv))
+			match = __srk_public_name(&SRK_template->publicArea);
+		return match;
+	}
+
+	for (i = 0; srk_candidates[i].name; ++i) {
+		const struct srk_candidate *cand = &srk_candidates[i];
+
+		/* rsaParent is only ever set when the key was sealed under an
+		 * RSA SRK, so it rules ECC out. The converse does not hold:
+		 * keys written before the flag existed carry no rsaParent at
+		 * all, and those are RSA ones, so a false still has to be
+		 * probed against every candidate. */
+		if (rsa_parent && strcmp(cand->alg, "RSA") != 0)
+			continue;
+
+		set_srk_alg(cand->alg);
+		if (cand->rsa_bits != 0)
+			set_srk_rsa_bits(cand->rsa_bits);
+
+		debug("Trying to load the sealed key under a %s SRK\n", cand->name);
+		if (__srk_try_load(esys_context, parent, &pub, &priv)) {
+			match = cand->name;
+			break;
+		}
+	}
+
+	SRK_template = saved_template;
+	set_srk_rsa_bits(saved_rsa_bits);
+
+	return match;
+}
+
+/*
  * Depending on the target platform, sealed data, authorized policies etc are
  * written to different types of files.
  */

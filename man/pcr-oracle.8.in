@@ -121,6 +121,11 @@ length is given using the \fB--rsa-bits\fP option.
 .B ecc-test
 Check whether the TPM supports ECC SRK keys.
 .TP
+.B load-test
+Find out which Storage Root Key a sealed key was created under. The key is
+given with the \fB--input\fP or the \fB--nvindex\fP option. See the
+\fBSRK detection\fP example below.
+.TP
 .B predict
 Try to predict a specific set of PCR values.
 .TP
@@ -179,6 +184,35 @@ this:
 .P
 This subcommand allows external programs, such as fde-tools, to find
 out the largest supported RSA key size.
+.\" ##################################################################
+.\" # SRK detection
+.\" ##################################################################
+.SS SRK detection
+The parent of a sealed key is chosen when the key is sealed and can never
+change afterwards; signing a new PCR policy for the key does not touch it.
+A boot loader that is told to use a different SRK will therefore fail to
+unseal the key, and the key file itself is of little help: the tpm2key
+format records a \fBrsaParent\fP boolean, which tells RSA from ECC but not
+the RSA key size, and the oldgrub format records nothing at all.
+.P
+The \fBload-test\fP action answers the question by asking the TPM, since
+\fBTPM2_Load\fP only succeeds under the actual parent:
+.P
+.nf
+.in +2
+# pcr-oracle --input /etc/fde/authorized-policy/sealed.tpm load-test
+RSA3072
+.fi
+.P
+The algorithm name is written to standard output in the spelling grub2
+expects for \fBGRUB_TPM2_SRK_ALG\fP, and the exit status is 0 when a match
+was found, 1 otherwise. Without further options, the candidates ECC,
+RSA2048, RSA3072 and RSA4096 are tried in that order; be aware that
+creating the larger RSA keys takes a while on most TPMs. Passing
+\fB--ecc-srk\fP or \fB--rsa-bits\fP restricts the test to that single
+candidate, which turns the action into a check of a configuration you
+already believe in. When the key names a persistent SRK, no probing takes
+place: the SRK is read from the TPM directly.
 .\" ##################################################################
 .\" # Prediction Mode
 .\" ##################################################################
